@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="1.0" xmlns:edmx="http://schemas.microsoft.com/ado/2007/06/edmx" xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata" xmlns:sap="http://www.sap.com/Protocols/SAPData">
+    <edmx:DataServices m:DataServiceVersion="2.0">
+        <Schema Namespace="ZFI_FIORI_IC_INVOICING_SRV" xml:lang="en" sap:schema-version="1" xmlns="http://schemas.microsoft.com/ado/2008/09/edm">
+            <Annotation Term="Core.SchemaVersion" String="1.0.0" xmlns="http://docs.oasis-open.org/odata/ns/edm"/>
+            <EntityType Name="TSAPostingType" sap:label="TSA Postings" sap:content-version="1">
+                <Key>
+                    <PropertyRef Name="SenderCountry"/>
+                    <PropertyRef Name="SenderCompanyCode"/>
+                    <PropertyRef Name="FIDocumentNumber"/>
+                    <PropertyRef Name="FiscalYear"/>
+                    <PropertyRef Name="Period"/>
+                </Key>
+                <Property Name="SenderCountry" Type="Edm.String" Nullable="false" MaxLength="3" sap:unicode="false" sap:label="Sender Country" sap:updatable="false"/>
+                <Property Name="SenderCompanyCode" Type="Edm.String" Nullable="false" MaxLength="4" sap:unicode="false" sap:label="Sender Company Code" sap:updatable="false"/>
+                <Property Name="FIDocumentNumber" Type="Edm.String" Nullable="false" MaxLength="10" sap:unicode="false" sap:label="FI Document Number" sap:updatable="false"/>
+                <Property Name="FiscalYear" Type="Edm.String" Nullable="false" MaxLength="4" sap:unicode="false" sap:label="Fiscal Year" sap:updatable="false"/>
+                <Property Name="Period" Type="Edm.String" Nullable="false" MaxLength="3" sap:unicode="false" sap:label="Period" sap:updatable="false"/>
+                <Property Name="SenderJV" Type="Edm.String" MaxLength="6" sap:unicode="false" sap:label="Sender JV" sap:updatable="false"/>
+                <Property Name="SenderEquityType" Type="Edm.String" MaxLength="3" sap:unicode="false" sap:label="Sender Equity Type" sap:updatable="false"/>
+                <Property Name="SenderCostCenter" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Sender Cost Center" sap:updatable="false"/>
+                <Property Name="SenderWBSElement" Type="Edm.String" MaxLength="24" sap:unicode="false" sap:label="Sender WBS Element" sap:updatable="false"/>
+                <Property Name="SenderCostElement" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Sender Cost Element" sap:updatable="false"/>
+                <Property Name="SenderActivity" Type="Edm.String" MaxLength="6" sap:unicode="false" sap:label="Sender Activity" sap:updatable="false"/>
+                <Property Name="ReceiverCountry" Type="Edm.String" MaxLength="3" sap:unicode="false" sap:label="Receiver Country" sap:updatable="false"/>
+                <Property Name="ReceiverCompanyCode" Type="Edm.String" MaxLength="4" sap:unicode="false" sap:label="Receiver Company Code" sap:updatable="false"/>
+                <Property Name="ReceiverCCFIDocumentNumber" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Receiver Co. Code FI Document" sap:updatable="false"/>
+                <Property Name="ReceiverCCFiscalYear" Type="Edm.String" MaxLength="4" sap:unicode="false" sap:label="Receiver Co. Code FI Document FY" sap:updatable="false"/>
+                <Property Name="ReceiverJV" Type="Edm.String" MaxLength="6" sap:unicode="false" sap:label="Receiver JV" sap:updatable="false"/>
+                <Property Name="ReceiverEquityType" Type="Edm.String" MaxLength="3" sap:unicode="false" sap:label="Receiver Equity Type" sap:updatable="false"/>
+                <Property Name="ReceiverCostCenter" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Receiver Cost Center" sap:updatable="false"/>
+                <Property Name="ReceiverWBSElement" Type="Edm.String" MaxLength="24" sap:unicode="false" sap:label="Receiver WBS Element" sap:updatable="false"/>
+                <Property Name="ReceiverCostElement" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Receiver Cost Element" sap:updatable="false"/>
+                <Property Name="ReceiverActivity" Type="Edm.String" MaxLength="6" sap:unicode="false" sap:label="Receiver Activity" sap:updatable="false"/>
+                <Property Name="AgreementType" Type="Edm.String" MaxLength="2" sap:unicode="false" sap:label="Agreement Type" sap:updatable="false"/>
+                <Property Name="Currency" Type="Edm.String" MaxLength="5" sap:unicode="false" sap:label="Currency" sap:updatable="false" sap:semantics="currency-code"/>
+                <Property Name="AmountInTransactionCurrency" Type="Edm.Decimal" Precision="24" Scale="3" sap:unicode="false" sap:unit="TransactionCurrency" sap:label="Amount in Transaction Currency" sap:updatable="false"/>
+                <Property Name="TransactionCurrency" Type="Edm.String" MaxLength="5" sap:unicode="false" sap:label="Transaction Currency" sap:updatable="false" sap:semantics="currency-code"/>
+                <Property Name="AmountInCompanyCodeCurrency" Type="Edm.Decimal" Precision="24" Scale="3" sap:unicode="false" sap:unit="CompanyCodeCurrency" sap:label="Amount in Company Code Currency" sap:updatable="false"/>
+                <Property Name="CompanyCodeCurrency" Type="Edm.String" MaxLength="5" sap:unicode="false" sap:label="Company Code Currency" sap:updatable="false" sap:semantics="currency-code"/>
+                <Property Name="AmountInGlobalCurrency" Type="Edm.Decimal" Precision="24" Scale="3" sap:unicode="false" sap:unit="GlobalCurrency" sap:label="Amount in Global Currency" sap:updatable="false"/>
+                <Property Name="GlobalCurrency" Type="Edm.String" MaxLength="5" sap:unicode="false" sap:label="Global Currency" sap:updatable="false" sap:semantics="currency-code"/>
+                <Property Name="Customer" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Customer" sap:updatable="false"/>
+                <Property Name="OutputTaxCode" Type="Edm.String" MaxLength="2" sap:unicode="false" sap:label="Output Tax Code" sap:updatable="false"/>
+                <Property Name="SenderICOAdjGL" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Sender ICO Adj GL" sap:updatable="false"/>
+                <Property Name="Vendor" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Vendor/Supplier" sap:updatable="false"/>
+                <Property Name="InputTaxCode" Type="Edm.String" MaxLength="2" sap:unicode="false" sap:label="Input Tax Code" sap:updatable="false"/>
+                <Property Name="WHT" Type="Edm.String" MaxLength="2" sap:unicode="false" sap:label="WHT" sap:updatable="false"/>
+                <Property Name="ReceiverICOAdjGL" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Receiver ICO Adj GL" sap:updatable="false"/>
+                <Property Name="SummaryInvoiceIndicator" Type="Edm.String" MaxLength="1" sap:unicode="false" sap:label="Summary Invoice Indicator" sap:updatable="false"/>
+                <Property Name="MarkupPercentage" Type="Edm.String" MaxLength="3" sap:unicode="false" sap:label="Mark-up Percentage" sap:updatable="false"/>
+                <Property Name="MarkupGL" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Mark-up GL" sap:updatable="false"/>
+                <Property Name="PostedDocumentNumberSCC" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Posted Document Number in Sender Co. Code" sap:creatable="false" sap:updatable="false"/>
+                <Property Name="PostedDocumentFYSCC" Type="Edm.String" MaxLength="4" sap:unicode="false" sap:label="Posted Document in Sender Co. Code - Fiscal Year" sap:creatable="false" sap:updatable="false"/>
+                <Property Name="PostedDocumentNumberRCC" Type="Edm.String" MaxLength="10" sap:unicode="false" sap:label="Posted Document Number in Receiver Co. Code" sap:creatable="false" sap:updatable="false"/>
+                <Property Name="PostedDocumentFYRCC" Type="Edm.String" MaxLength="4" sap:unicode="false" sap:label="Posted Document in Receiver Co. Code - Fiscal Year" sap:creatable="false" sap:updatable="false"/>
+                <Property Name="Message" Type="Edm.String" MaxLength="220" sap:unicode="false" sap:label="Message" sap:creatable="false" sap:updatable="false"/>
+            </EntityType>
+            <EntityContainer Name="ZFI_FIORI_IC_INVOICING_SRV_Entities" m:IsDefaultEntityContainer="true" sap:supported-formats="atom json xlsx">
+                <EntitySet Name="TSAPosting" EntityType="ZFI_FIORI_IC_INVOICING_SRV.TSAPostingType" sap:creatable="false" sap:updatable="false" sap:deletable="false" sap:pageable="false" sap:addressable="false" sap:content-version="1"/>
+            </EntityContainer>
+            <atom:link rel="self" href="https://DEV-SAPS4.WOODSIDE.COM.AU:443/sap/opu/odata/sap/ZFI_FIORI_IC_INVOICING_SRV/$metadata" xmlns:atom="http://www.w3.org/2005/Atom"/>
+            <atom:link rel="latest-version" href="https://DEV-SAPS4.WOODSIDE.COM.AU:443/sap/opu/odata/sap/ZFI_FIORI_IC_INVOICING_SRV/$metadata" xmlns:atom="http://www.w3.org/2005/Atom"/>
+        </Schema>
+    </edmx:DataServices>
+</edmx:Edmx>
