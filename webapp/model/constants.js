@@ -2,7 +2,8 @@ sap.ui.define([], function () {
     "use strict";
     return {
         "FORM_OBJECT": {
-            "CompanyCode": []
+            "CompanyCode": [],
+            "Report": false
         },
         "COMPANY_CODE_PROP": "CompanyCode",
         "COMPANY_CODE_TEXT": "CompanyCodeName",
@@ -10,6 +11,7 @@ sap.ui.define([], function () {
         "FISCAL_PERIOD_PROP":"Period",
         "POSTING_DATE_PROP":"PostingDate",
         "DOCUMENT_DATE_PROP":"DocumentDate",
+        "REPORT_PROP": "Report",
         "CompanyCode": {
             "cols": [
                 {

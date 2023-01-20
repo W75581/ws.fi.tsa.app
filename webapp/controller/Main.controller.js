@@ -2,20 +2,19 @@ sap.ui.define([
     "sap/ui/core/mvc/Controller",
     'sap/m/ColumnListItem',
     'sap/m/Label',
-    'sap/m/SearchField',
     'sap/m/Token',
+    'sap/m/SearchField',
     'sap/m/MessageToast',
-    'sap/m/MessageBox',
+    'sap/ui/table/Column',
+	'sap/m/Column',
     'sap/ui/model/Filter',
     'sap/ui/model/FilterOperator',
-    'sap/ui/export/library',
-	'sap/ui/export/Spreadsheet',
     'ws/fi/tsa/app/utils/Validator'
 ],
     /**
      * @param {typeof sap.ui.core.mvc.Controller} Controller
      */
-    function (Controller, ColumnListItem, Label, SearchField, Token, MessageToast, MessageBox, Filter, FilterOperator, exportLibrary, Spreadsheet, Validator) {
+    function (Controller, ColumnListItem, Label, Token, SearchField, MessageToast, UIColumn, MColumn, Filter, FilterOperator, Validator) {
         "use strict";
 
         return Controller.extend("ws.fi.tsa.app.controller.Main", {
@@ -36,7 +35,7 @@ sap.ui.define([
                 var oModel = new sap.ui.model.json.JSONModel(oFormObject);
                 this.getView().setModel(oModel,"mdlForm");
                 this._oFormMdl = this.getView().getModel("mdlForm");
-
+                this._bSimulate = true;
                 this._setDefaultPstDate();
             },
 
@@ -95,17 +94,63 @@ sap.ui.define([
             },
 
             /**
-             * Gets instance of Create Request dialog
+             * Generic method for getting model values as filters
              * @private
+             * @returns {sap.ui.model.Filter} Filter object representing the filter
              */
-            _getPostTblDialog: function () {
-                if (!this._oPostTblDiag) {
-                    this._oPostTblDiag = sap.ui.xmlfragment("idPostTable", "ws.fi.tsa.app.view.fragments.PostedTable",
-                        this);
-                        this._oPostTblDiag.setModel(this._oFormMdl);
-                    this.getView().addDependent(this._oPostTblDiag);
+             _getFilter: function(sProperty) {
+                var aKeys = this._oFormMdl.getProperty("/" + sProperty);
+                var aFilters = [];
+
+                aKeys.forEach(function (sKey) {
+                    aFilters.push(new Filter(sProperty, FilterOperator.EQ, sKey));
+                });
+
+                if (aFilters && aFilters.length > 0) {
+                    if (aFilters.length == 1) {
+                        return aFilters[0];
+                    } else {
+                        return new Filter({
+                            filters: aFilters,
+                            and: false
+                        });
+                    }
                 }
-                return this._oPostTblDiag;
+
+                return undefined;
+            },
+
+            /**
+             * Get the filters from Form
+             * @private
+             * @returns {Array} Array of Filters
+             */
+             _getFilters: function() {
+                var aFilters = [];
+                var aCompanyCodeFilter = this._getFilter(this._oConstant["COMPANY_CODE_PROP"]);
+                if (aCompanyCodeFilter) aFilters.push(aCompanyCodeFilter);
+
+                aFilters.push(new Filter("FiscalYear", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["FISCAL_YEAR_PROP"])));
+                aFilters.push(new Filter("PostingPeriod", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["FISCAL_PERIOD_PROP"])));
+                aFilters.push(new Filter("PostingDate", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["POSTING_DATE_PROP"])));
+                aFilters.push(new Filter("DocumentDate", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["DOCUMENT_DATE_PROP"])));
+
+                if (this._bSimulate === true) {
+                    var bReport = this._oFormMdl.getProperty("/" + this._oConstant["REPORT_PROP"]);
+                    if (bReport === true) {
+                        aFilters.push(new Filter("Test", FilterOperator.EQ, false));
+                    }
+                    else {
+                        aFilters.push(new Filter("Test", FilterOperator.EQ, true));
+                    }
+                    aFilters.push(new Filter("Report", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["REPORT_PROP"])));
+                }
+                else {
+                    aFilters.push(new Filter("Test", FilterOperator.EQ, false));
+                    aFilters.push(new Filter("Report", FilterOperator.EQ, false));
+                }
+
+                return aFilters;
             },
 
             /**
@@ -113,7 +158,10 @@ sap.ui.define([
              * @param {sap.ui.base.Event} oEvent from the multi-input
              * @public
              */
-            onValueHelpRequested: function() {
+            onValueHelpRequested: function(oEvent) {
+                this._oMultiInput = oEvent.getSource();
+                var sTitle = this._oMultiInput.getLabels()[0].getText();
+                this.sCurrMultiInput = sTitle.replace(/\s+/g, '');
                 this._oBasicSearchField = new SearchField();
                 if (!this.pDialog) {
                     this.pDialog = this.loadFragment({
@@ -152,7 +200,7 @@ sap.ui.define([
                         if (oTable.bindRows) {
                             // Bind rows to the ODataModel and add columns
                             oTable.bindAggregation("rows", {
-                                path: "/CompanyCode",
+                                path: "/I_CompanyCode",
                                 events: {
                                     dataReceived: function() {
                                         oDialog.update();
@@ -160,14 +208,14 @@ sap.ui.define([
                                 }
                             });
                             oTable.addColumn(new UIColumn({label: "Company Code", template: "CompanyCode"}));
-                            oTable.addColumn(new UIColumn({label: "Company Name", template: "CompanyName"}));
+                            oTable.addColumn(new UIColumn({label: "Company Name", template: "CompanyCodeName"}));
                         }
     
                         // For Mobile the default table is sap.m.Table
                         if (oTable.bindItems) {
                             // Bind items to the ODataModel and add columns
                             oTable.bindAggregation("items", {
-                                path: "/CompanyCode",
+                                path: "/I_CompanyCode",
                                 template: new ColumnListItem({
                                     cells: [new Label({text: "{CompanyCode}"}), new Label({text: "{CompanyCode}"})]
                                 }),
@@ -284,6 +332,54 @@ sap.ui.define([
             },
 
             /**
+             * Handles when user manually inputs a value in MultiInput
+             * @param {sap.ui.base.Event} oEvent
+             * @public
+             */
+             onMultiInputChange: function (oEvent) {
+                var oMultiInput = oEvent.getSource();
+                var aTokens = oMultiInput.getTokens();
+                var sInputName = oMultiInput.getName();
+                var sEntitySet = "/I_" + sInputName;
+                var sValue = oMultiInput.getValue();
+                var oKeysAndTexts = {};
+
+                oKeysAndTexts["CompanyCode"] = {
+                    key: "CompanyCode",
+                    text: "CompanyCodeName"
+                };
+
+                if (sValue) {
+                    oMultiInput.setBusy(true);
+
+                    new Promise(function (fnResolve, fnReject) {
+                        this._oModel.read(sEntitySet + "('" + sValue + "')", {
+                            success: function (oData) {
+                                var sKey = oData[oKeysAndTexts[sInputName].key];
+                                var sText = oData[oKeysAndTexts[sInputName].text];
+                                aTokens.push(new Token({
+                                    key: sKey,
+                                    text: sText + " (" + sKey + ")"
+                                }));
+
+                                oMultiInput.setTokens(aTokens);
+                                var aKeys = this._oFormMdl.getProperty("/" + oKeysAndTexts[sInputName].key);
+                                aKeys.push(sKey);
+
+                                fnResolve();
+                            }.bind(this),
+                            error: function () {
+                                fnReject();
+                            }
+                        });
+                    }.bind(this)).finally(function () {
+                        oMultiInput.setValue();
+                        oMultiInput.setBusy(false);
+                    });
+                }
+            },
+
+            /**
              * Apply Fiscal Year to Fiscal Year Period as filter.
              * @public
              * @param {sap.ui.base.Event} oEvent from the combobox
@@ -299,6 +395,7 @@ sap.ui.define([
                 oBinding.filter(aFilters, sap.ui.model.FilterType.Application);
             },
 
+            
             /**
              * Generates the Test Run of Report.
              * @public
@@ -311,6 +408,7 @@ sap.ui.define([
                     return;
                 }
 
+                this._bSimulate = true;
                 this._getSmartTableById().rebindTable();
             },
 
@@ -348,6 +446,7 @@ sap.ui.define([
              * @param {sap.ui.base.Event} oEvent from the smart filter table
              */
              onBeforeRebindTable: function(oEvent) {
+                this._getSmartTableById().getTable().removeSelections();
                 var oBindingParams = oEvent.getParameter("bindingParams");
                 var aFilters = this._getFilters();
                 oBindingParams.filters = aFilters;
@@ -358,101 +457,15 @@ sap.ui.define([
              * @public
              */
              onConfirmPost: function() {
+                this._bSimulate = false;
                 var aItems = this._getSmartTableById().getTable().getItems();
-                debugger;
                 
                 if (aItems.length < 1) {
                     MessageToast.show(this._getResourceText("saveErrMessage"));
                     return;
                 }
 
-                var aRecords = [];
-
-                aItems.forEach((value) => {
-                    var oObj = value.getBindingContext().getObject();
-                    delete oObj.__metadata;
-                    aRecords.push(oObj);
-                });
-
-                this._oModel.setDeferredGroups(["group1"]);
-                var mParameters = {groupId:"group1",success: this._handlePostSuccess.bind(this),error: this._handlePostError.bind(this)};
-
-                for (let i = 0; i < aRecords.length; i++) {
-                    this._oModel.create("/TSAPosting", aRecords[i], mParameters);
-                }
-                
-                this._oModel.submitChanges(mParameters);
-
-            },
-
-            /**
-             * Handles the Post Success.
-             * @private
-             */
-            _handlePostSuccess: function(data) {
-                if (!data.__batchResponses) {
-                    this._oFormMdl.setProperty("/postRec", [data]);
-                
-                    if (this._oPostTblDiag) {
-                        this._oPostTblDiag.open();
-                    } else {
-                        var oPromise = this.loadFragment({
-                            id: "idPostTable",
-                            name: "ws.fi.tsa.app.view.fragments.PostedTable"
-                        });
-
-                        oPromise.then(function (oDialog) {
-                            this._oPostTblDiag = oDialog;
-                            this._oPostTblDiag.open();
-                        }.bind(this));
-                    }
-
-                    
-                }
-            },
-
-            /**
-             * Handles the Post Errors.
-             * @private
-             */
-            _handlePostError: function(oResponse) {
-                MessageBox.error(this._getResourceText("postErrMessage"), {
-                    title: "Error",
-                    id: "idMsgBox",
-                    details: oResponse.responseText,
-                    contentWidth: "100px"
-                });
-            },
-
-            /**
-             * Exports Data from the Post Table Dialog.
-             * @public
-             */
-             onExportPosted: function () {
-                var oTable = this.byId("idPostTable--idTablePostedRecs");
-                console.log(oTable);
-                if (oTable) {
-                    var oRowBinding = oTable.getBinding("items");
-                    var aCols = this._oConstant["EXPORT_FIELDS"];
-
-                    var oSheet = new Spreadsheet({
-                        workbook: { columns: aCols },
-                        dataSource: oRowBinding,
-                        fileName: 'Posted Journal Entries.xlsx'
-                    });
-
-                    oSheet.build().finally(function() {
-                        oSheet.destroy();
-                    });
-                }
-            },
-
-            /**
-             * Closes the Post Table Dialog.
-             * @public
-             */
-            onPostTblDiagClose: function() {
-                if (this._oPostTblDiag) this._oPostTblDiag.close();
+                this._getSmartTableById().rebindTable();
             },
 
             /**

@@ -26,6 +26,8 @@
                     <ComboBox required="true" id="idComboBxFisYrPrd" selectedKey="{mdlForm>/Period}" items="{path: '/I_FiscalYearPeriod'}">
                         <core:ListItem key="{FiscalPeriod}" text="{FiscalPeriod}" />
                     </ComboBox>
+                    <Label text="{i18n>reportOnly}" />
+                    <CheckBox id="idCBRprtOnly" selected="{mdlForm>/Report}" />
                     <core:Title text="" />
                     <Label text="{i18n>postDate}" />
                     <DatePicker id="idMulInpPstDte" placeholder="{i18n>plceHldrPostDte}" change="handlePostDateChg" 
@@ -72,10 +74,10 @@
             </smartTable:SmartTable>
         </content>
         <footer>
-            <OverflowToolbar>
-                <ToolbarSpacer />
-                <Button type="Emphasized" text="{i18n>confirmPost}" press="onConfirmPost" />
-            </OverflowToolbar>
-        </footer>
+			<OverflowToolbar visible="{=!${mdlForm>/Report}}">
+				<ToolbarSpacer/>
+				<Button type="Emphasized" text="{i18n>confirmPost}" press="onConfirmPost"/>
+			</OverflowToolbar>
+		</footer>
     </Page>
 </mvc:View>

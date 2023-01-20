@@ -144,6 +144,7 @@ sap.ui.define(
 							// oControl.hasOwnProperty("tokens"); eto dapat gamitin
 
 							if (this._aValidateProperties[i] === "tokens") {
+								debugger;
 								if (oControl.getTokens().length === 0) {
 									oExternalValue = "";
 								}
