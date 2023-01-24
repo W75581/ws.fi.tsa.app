@@ -131,7 +131,12 @@ sap.ui.define([
                 if (aCompanyCodeFilter) aFilters.push(aCompanyCodeFilter);
 
                 aFilters.push(new Filter("FiscalYear", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["FISCAL_YEAR_PROP"])));
-                aFilters.push(new Filter("PostingPeriod", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["FISCAL_PERIOD_PROP"])));
+
+                var aPeriodKeys = this._oFormMdl.getProperty("/" + this._oConstant["FISCAL_PERIOD_PROP"]);
+                aPeriodKeys.forEach((value) => {
+                    aFilters.push(new Filter("Period", FilterOperator.EQ, value));
+                });
+                
                 aFilters.push(new Filter("PostingDate", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["POSTING_DATE_PROP"])));
                 aFilters.push(new Filter("DocumentDate", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["DOCUMENT_DATE_PROP"])));
 
@@ -244,9 +249,14 @@ sap.ui.define([
              * @param {sap.ui.base.Event} oEvent from the ok button
              * @public
              */
-            onValueHelpOkPress: function (oEvent) {
+             onValueHelpOkPress: function (oEvent) {
                 var aTokens = oEvent.getParameter("tokens");
                 this._oMultiInput.setTokens(aTokens);
+                var sTitle = oEvent.getSource().getTitle().replace(/\s+/g, '');
+                var aKeys = [];
+                aTokens.map((oToken) => { aKeys.push(oToken.getKey()); });
+                this._oFormMdl.setProperty("/" + sTitle, aKeys);
+
                 this._oVHD.close();
             },
     
@@ -327,55 +337,35 @@ sap.ui.define([
                     var aKeys = this._oFormMdl.getProperty("/" + sProperty);
                     var iIndex = aKeys.indexOf(oToken.getKey());
                     if (iIndex >= 0) aKeys.splice(iIndex, 1);
-                    if (sProperty === COMPANY_CODE_PROP) this._updateFromBRF();
                 }
             },
 
             /**
-             * Handles when user manually inputs a value in MultiInput
-             * @param {sap.ui.base.Event} oEvent
+             * Add selected item from suggestions as a token
              * @public
+             * @param {sap.ui.base.Event} oEvent
              */
-             onMultiInputChange: function (oEvent) {
+             onSuggestedItemSelected: function (oEvent) {
                 var oMultiInput = oEvent.getSource();
-                var aTokens = oMultiInput.getTokens();
                 var sInputName = oMultiInput.getName();
-                var sEntitySet = "/I_" + sInputName;
-                var sValue = oMultiInput.getValue();
-                var oKeysAndTexts = {};
+                var oItem = oEvent.getParameter("selectedRow");
+                var aTokens = oMultiInput.getTokens();
+                var oKeysAndTexts = this._oConstant["FIELDS"];
 
-                oKeysAndTexts["CompanyCode"] = {
-                    key: "CompanyCode",
-                    text: "CompanyCodeName"
-                };
+                if (oItem) {
+                    var oContext = oItem.getBindingContext();
+                    var sKey = oContext.getProperty(oKeysAndTexts[sInputName].key);
+                    var aKeys = this._oFormMdl.getProperty("/" + sInputName);
 
-                if (sValue) {
-                    oMultiInput.setBusy(true);
-
-                    new Promise(function (fnResolve, fnReject) {
-                        this._oModel.read(sEntitySet + "('" + sValue + "')", {
-                            success: function (oData) {
-                                var sKey = oData[oKeysAndTexts[sInputName].key];
-                                var sText = oData[oKeysAndTexts[sInputName].text];
-                                aTokens.push(new Token({
-                                    key: sKey,
-                                    text: sText + " (" + sKey + ")"
-                                }));
-
-                                oMultiInput.setTokens(aTokens);
-                                var aKeys = this._oFormMdl.getProperty("/" + oKeysAndTexts[sInputName].key);
-                                aKeys.push(sKey);
-
-                                fnResolve();
-                            }.bind(this),
-                            error: function () {
-                                fnReject();
-                            }
-                        });
-                    }.bind(this)).finally(function () {
-                        oMultiInput.setValue();
-                        oMultiInput.setBusy(false);
-                    });
+                    if (aKeys.includes(sKey) === false) {
+                        aTokens.push(new Token({
+                            key: sKey,
+                            text: oContext.getProperty(oKeysAndTexts[sInputName].text) + " (" + sKey + ")"
+                        }));
+    
+                        oMultiInput.setTokens(aTokens);
+                        aKeys.push(sKey);
+                    }
                 }
             },
 
@@ -420,6 +410,7 @@ sap.ui.define([
                 this._clearControl("idMulInpCompCode", this._oConstant["COMPANY_CODE_PROP"]);
                 this._clearControl("idComboBxFisYr", this._oConstant["FISCAL_YEAR_PROP"]);
                 this._clearControl("idComboBxFisYrPrd", this._oConstant["FISCAL_PERIOD_PROP"]);
+                this._setDefaultPstDate();
             },
 
             /**
@@ -433,6 +424,10 @@ sap.ui.define([
                     case "sap.m.ComboBox":
                         oControl.setSelectedKey("");
                         this._oFormMdl.setProperty("/" + sProperty, "");
+                        break;
+                    case "sap.m.MultiComboBox":
+                        oControl.setSelectedKeys([]);
+                        this._oFormMdl.setProperty("/" + sProperty, []);
                         break;
                     case "sap.m.MultiInput":
                         oControl.removeAllTokens();

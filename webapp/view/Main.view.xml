@@ -15,7 +15,26 @@
                 <f:content>
                     <core:Title text="" />
                     <Label text="{i18n>companyCode}" required="true"/>
-                    <MultiInput id="idMulInpCompCode" required="true" valueHelpRequest="onValueHelpRequested" />
+                    <MultiInput id="idMulInpCompCode" required="true" value="{CompanyCode}" tokens="{path: 'mdlForm>/CompanyCodeVal'}" name="CompanyCode" suggestionRows="{/I_CompanyCode}"
+                    tokenUpdate="onUpdateTokens" valueHelpRequest="onValueHelpRequested" suggestionItemSelected="onSuggestedItemSelected">
+                        <tokens>
+                            <Token key="{mdlForm>key}" text="{mdlForm>text}" />
+                        </tokens>
+                        <suggestionColumns>
+                            <Column hAlign="Begin" popinDisplay="Inline" demandPopin="true">
+                                <Label text="{i18n>companyCode}" />
+                            </Column>
+                            <Column hAlign="Begin" popinDisplay="Inline" demandPopin="true">
+                                <Label text="{i18n>description}" />
+                            </Column>
+                        </suggestionColumns>
+                        <suggestionRows>
+                            <ColumnListItem>
+                                <Label text="{CompanyCode}" />
+                                <Label text="{CompanyCodeName}" />
+                            </ColumnListItem>
+                        </suggestionRows>
+                    </MultiInput>
                     <Label text="{i18n>periodFisYr}" />
                     <ComboBox required="true" id="idComboBxFisYr" selectionChange="onSelFiscalYear" selectedKey="{mdlForm>/FiscalYear}" items="{path: '/I_FiscalYear'}">
                         <core:ListItem key="{FiscalYear}" text="{FiscalYear}" />
@@ -23,9 +42,9 @@
                             <l:GridData span="XL4 L4 M4 S4" />
                         </layoutData>
                     </ComboBox>
-                    <ComboBox required="true" id="idComboBxFisYrPrd" selectedKey="{mdlForm>/Period}" items="{path: '/I_FiscalYearPeriod'}">
+                    <MultiComboBox required="true" id="idComboBxFisYrPrd" selectedKeys="{mdlForm>/Period}" items="{path: '/I_FiscalYearPeriod'}">
                         <core:ListItem key="{FiscalPeriod}" text="{FiscalPeriod}" />
-                    </ComboBox>
+                    </MultiComboBox>
                     <Label text="{i18n>reportOnly}" />
                     <CheckBox id="idCBRprtOnly" selected="{mdlForm>/Report}" />
                     <core:Title text="" />

@@ -144,7 +144,6 @@ sap.ui.define(
 							// oControl.hasOwnProperty("tokens"); eto dapat gamitin
 
 							if (this._aValidateProperties[i] === "tokens") {
-								debugger;
 								if (oControl.getTokens().length === 0) {
 									oExternalValue = "";
 								}
@@ -166,8 +165,7 @@ sap.ui.define(
 								);
 								isValid = false;
 							} else if (
-								oControl.getAggregation("picker") &&
-								oControl.getProperty("selectedKey").length === 0
+								oExternalValue.length === 0
 							) {
 								// might be a select
 								this._setValueState(
@@ -175,9 +173,8 @@ sap.ui.define(
 									ValueState.Error,
 									"Please choose an entry!"
 								);
-								isValid = false;
-							} else if (oControl.getBindingInfo && oControl.getBindingInfo("suggestionItems")) {
-								//Ignore, app will set the state
+								isValid = false
+
 							}
 							else {
 								oControl.setValueState(ValueState.None);
@@ -186,6 +183,7 @@ sap.ui.define(
 							}
 						}
 					} catch (ex) {
+						debugger;
 						// Validation failed
 					}
 				}

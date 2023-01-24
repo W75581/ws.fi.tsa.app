@@ -24,6 +24,12 @@ sap.ui.define([], function () {
                 }
             ]
         },
+        "FIELDS": {
+            "CompanyCode" : {
+                "key": "CompanyCode",
+                "text": "CompanyCodeName"
+            }
+        },
         "EXPORT_FIELDS": [
             {
                 "label": 'Period',
