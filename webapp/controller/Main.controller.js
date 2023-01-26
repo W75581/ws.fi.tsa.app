@@ -9,12 +9,13 @@ sap.ui.define([
 	'sap/m/Column',
     'sap/ui/model/Filter',
     'sap/ui/model/FilterOperator',
+    'sap/ui/model/type/String',
     'ws/fi/tsa/app/utils/Validator'
 ],
     /**
      * @param {typeof sap.ui.core.mvc.Controller} Controller
      */
-    function (Controller, ColumnListItem, Label, Token, SearchField, MessageToast, UIColumn, MColumn, Filter, FilterOperator, Validator) {
+    function (Controller, ColumnListItem, Label, Token, SearchField, MessageToast, UIColumn, MColumn, Filter, FilterOperator, TypeString, Validator) {
         "use strict";
 
         return Controller.extend("ws.fi.tsa.app.controller.Main", {
@@ -103,7 +104,13 @@ sap.ui.define([
                 var aFilters = [];
 
                 aKeys.forEach(function (sKey) {
-                    aFilters.push(new Filter(sProperty, FilterOperator.EQ, sKey));
+                    if (!sKey.hasOwnProperty("keyField")) {
+                        aFilters.push(new Filter(sProperty, FilterOperator.EQ, sKey));
+                    }
+                    else {
+                        //for definitions
+                        aFilters.push(new Filter(sKey.keyField, FilterOperator[sKey.operation], sKey.value1, sKey.value2));
+                    }  
                 });
 
                 if (aFilters && aFilters.length > 0) {
@@ -137,9 +144,6 @@ sap.ui.define([
                     aFilters.push(new Filter("Period", FilterOperator.EQ, value));
                 });
                 
-                aFilters.push(new Filter("PostingDate", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["POSTING_DATE_PROP"])));
-                aFilters.push(new Filter("DocumentDate", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["DOCUMENT_DATE_PROP"])));
-
                 if (this._bSimulate === true) {
                     var bReport = this._oFormMdl.getProperty("/" + this._oConstant["REPORT_PROP"]);
                     if (bReport === true) {
@@ -151,6 +155,8 @@ sap.ui.define([
                     aFilters.push(new Filter("Report", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["REPORT_PROP"])));
                 }
                 else {
+                    aFilters.push(new Filter("PostingDate", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["POSTING_DATE_PROP"])));
+                    aFilters.push(new Filter("DocumentDate", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["DOCUMENT_DATE_PROP"])));
                     aFilters.push(new Filter("Test", FilterOperator.EQ, false));
                     aFilters.push(new Filter("Report", FilterOperator.EQ, false));
                 }
@@ -187,6 +193,15 @@ sap.ui.define([
                         return;
                     }
                     this.getView().addDependent(oDialog);
+
+                    oDialog.setRangeKeyFields([{
+                        label: "Company Code",
+                        key: "CompanyCode",
+                        type: "string",
+                        typeInstance: new TypeString({}, {
+                            maxLength: 7
+                        })
+                    }]);
     
                     // Set Basic Search for FilterBar
                     oFilterBar.setFilterBarExpanded(false);
@@ -254,7 +269,15 @@ sap.ui.define([
                 this._oMultiInput.setTokens(aTokens);
                 var sTitle = oEvent.getSource().getTitle().replace(/\s+/g, '');
                 var aKeys = [];
-                aTokens.map((oToken) => { aKeys.push(oToken.getKey()); });
+                aTokens.map((oToken) => { 
+                    if (oToken.data("range") === null) {
+                        aKeys.push(oToken.getKey()); 
+                    }
+                    else {
+                        oToken.data("range").key = oToken.getKey();
+                        aKeys.push(oToken.data("range")); 
+                    }
+                });
                 this._oFormMdl.setProperty("/" + sTitle, aKeys);
 
                 this._oVHD.close();
@@ -334,8 +357,16 @@ sap.ui.define([
 
                 var sProperty = oProperties[oMultiInput.getName()];
                 if (oEvent.getParameter("type") === "removed") {
+                    var iIndex;
                     var aKeys = this._oFormMdl.getProperty("/" + sProperty);
-                    var iIndex = aKeys.indexOf(oToken.getKey());
+                    if (oToken.data("range") === null) {
+                        iIndex = aKeys.indexOf(oToken.getKey());
+                    }
+                    else {
+                        iIndex = aKeys.findIndex(object => { return object.key === oToken.getKey()});
+                        this._oVHD._oFilterPanel._oConditionPanel.removeCondition(oToken.getKey().replace("range", "condition"));
+                    }
+                    
                     if (iIndex >= 0) aKeys.splice(iIndex, 1);
                 }
             },
@@ -411,6 +442,8 @@ sap.ui.define([
                 this._clearControl("idComboBxFisYr", this._oConstant["FISCAL_YEAR_PROP"]);
                 this._clearControl("idComboBxFisYrPrd", this._oConstant["FISCAL_PERIOD_PROP"]);
                 this._setDefaultPstDate();
+
+                this._oVHD._oFilterPanel._oConditionPanel.setConditions([]);
             },
 
             /**
