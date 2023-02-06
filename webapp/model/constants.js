@@ -3,7 +3,12 @@ sap.ui.define([], function () {
     return {
         "FORM_OBJECT": {
             "CompanyCode": [],
-            "Report": false
+            "FIDocumentNumber": [],
+            "Report": false,
+            "Busy": false,
+            "PrintOut": false,
+            "ShowFooter": false,
+            "Simulate": false
         },
         "COMPANY_CODE_PROP": "CompanyCode",
         "COMPANY_CODE_TEXT": "CompanyCodeName",
@@ -11,6 +16,7 @@ sap.ui.define([], function () {
         "FISCAL_PERIOD_PROP":"Period",
         "POSTING_DATE_PROP":"PostingDate",
         "DOCUMENT_DATE_PROP":"DocumentDate",
+        "DOCUMENT_NO_PROP":"FIDocumentNumber",
         "REPORT_PROP": "Report",
         "CompanyCode": {
             "cols": [
