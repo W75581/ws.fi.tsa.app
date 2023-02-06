@@ -1,5 +1,6 @@
 sap.ui.define([
     "sap/ui/core/mvc/Controller",
+    "sap/ui/core/util/File",
     "sap/ui/model/json/JSONModel",
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
@@ -12,15 +13,18 @@ sap.ui.define([
     "sap/m/SearchField",
     "sap/m/MessageToast",
     "sap/m/MessageBox",
+    "sap/m/PDFViewer",
+    "sap/base/security/URLListValidator",
     "ws/fi/tsa/app/utils/Validator"
 ],
     /**
      * @param {typeof sap.ui.core.mvc.Controller} Controller
      */
-    function (Controller,
+    function (Controller, FileUtil,
             JSONModel, Filter, FilterOperator, TypeString,
             UIColumn,
-            MColumn, ColumnListItem, Label, Token, SearchField, MessageToast, MessageBox,
+            MColumn, ColumnListItem, Label, Token, SearchField, MessageToast, MessageBox, PDFViewer,
+            URLListValidator,
             Validator) {
         "use strict";
 
@@ -35,6 +39,8 @@ sap.ui.define([
              * @public
              */
             onInit: function () {
+                URLListValidator.add("blob");
+
                 var oComponent = this.getOwnerComponent();
                 this._oConstant = oComponent ? oComponent.getModel("constant").getData() : undefined;
                 this._oModel = oComponent.getModel();
@@ -46,6 +52,15 @@ sap.ui.define([
                 this._setDefaultPstDate();
 
                 this._oSmartTable = this.byId("idMainTable");
+                this._oDocumentNumInput = this.byId("idMulInpDocNum");
+            },
+
+            /**
+             * Called when the worklist controller is destroyed.
+             * @public
+             */
+            onExit: function () {
+                URL.revokeObjectURL(this._oPDFURI);
             },
 
             /**
@@ -288,6 +303,65 @@ sap.ui.define([
             },
 
             /**
+             * Handles when user selects the Value Help for the Document Number multi-input
+             * @param {sap.ui.base.Event} oEvent from the multi-input
+             * @public
+             */
+            onDocNumValueHelpRequested: function (oEvent) {
+                if (this._oDocNumVHD) {
+                    this._oDocNumVHD.open();
+                } else {
+                    this._oDocNumVHD = this.loadFragment({
+                        name: "ws.fi.tsa.app.view.fragments.FIDocumentNumberVH"
+                    });
+
+                    this._oDocNumVHD.then(function(oDialog) {
+                        this._oDocNumVHD = oDialog;
+                        this.getView().addDependent(oDialog);
+                        oDialog.setRangeKeyFields([{
+                            label: this._getResourceText("docNum"),
+                            key: "FIDocumentNumber",
+                            type: "string",
+                            typeInstance: new TypeString({}, {
+                                maxLength: 10
+                            })
+                        }]);
+        
+                        oDialog.setTokens(this._oDocumentNumInput.getTokens());
+                        oDialog.open();
+                    }.bind(this));
+                }
+            },
+
+            /**
+             * Called to set the tokens and close the Document Number Value Help dialog.
+             * @param {sap.ui.base.Event} oEvent from the ok button
+             * @public
+             */
+            onDocNumValueHelpOkPress: function (oEvent) {
+                var aTokens = oEvent.getParameter("tokens");
+                this._oDocumentNumInput.setTokens(aTokens);
+
+                var aKeys = [];
+                aTokens.map((oToken) => { 
+                    if (oToken.data("range") === null) {
+                        aKeys.push(oToken.getKey()); 
+                    }
+                    else {
+                        oToken.data("range").key = oToken.getKey();
+                        aKeys.push(oToken.data("range")); 
+                    }
+                });
+                this._oFormMdl.setProperty("/" + this._oConstant["DOCUMENT_NO_PROP"], aKeys);
+
+                this._oDocNumVHD.close();
+            },
+
+            onDocNumValueHelpCancelPress: function () {
+                this._oDocNumVHD.close();
+            },
+
+            /**
              * Handles when user uses the search functionality 
              * from the Value Help Dialog 
              * @param {sap.ui.base.Event} oEvent from the ok button
@@ -370,6 +444,37 @@ sap.ui.define([
             },
 
             /**
+             * Update stored fields if it has been removed.
+             * @public
+             * @param {sap.ui.base.Event} oEvent from the multiinput
+             */
+            onUpdateDocNumTokens: function (oEvent) {
+                //Always selecting one
+                var oToken = oEvent.getParameter("removedTokens")[0];
+
+                var oMultiInput = oEvent.getSource();
+                var oProperties = {};
+                oProperties[this._oConstant["DOCUMENT_NO_PROP"]] = this._oConstant["DOCUMENT_NO_PROP"];
+
+                var sProperty = oProperties[oMultiInput.getName()];
+                if (oEvent.getParameter("type") === "removed") {
+                    var iIndex;
+                    var aKeys = this._oFormMdl.getProperty("/" + sProperty);
+                    if (oToken.data("range") === null) {
+                        iIndex = aKeys.indexOf(oToken.getKey());
+                    }
+                    else {
+                        iIndex = aKeys.findIndex(object => { return object.key === oToken.getKey()});
+                        if (this._oDocNumVHD &&
+                            this._oDocNumVHD._oFilterPanel &&
+                            this._oDocNumVHD._oFilterPanel._oConditionPanel) this._oDocNumVHD._oFilterPanel._oConditionPanel.removeCondition(oToken.getKey().replace("range", "condition"));
+                    }
+                    
+                    if (iIndex >= 0) aKeys.splice(iIndex, 1);
+                }
+            },
+
+            /**
              * Add selected item from suggestions as a token
              * @public
              * @param {sap.ui.base.Event} oEvent
@@ -424,6 +529,7 @@ sap.ui.define([
                 this._clearControl("idComboBxFisYr", this._oConstant["FISCAL_YEAR_PROP"]);
                 this._clearControl("idComboBxFisYrPrd", this._oConstant["FISCAL_PERIOD_PROP"]);
                 this._clearControl("idCBRprtOnly", this._oConstant["REPORT_PROP"]);
+                this._clearControl("idMulInpDocNum", this._oConstant["DOCUMENT_NO_PROP"]);
                 this._setDefaultPstDate();
 
                 if (this._oVHD &&
@@ -464,8 +570,7 @@ sap.ui.define([
              */
              onBeforeRebindTable: function(oEvent) {
                 var oBindingParams = oEvent.getParameter("bindingParams");
-                var aFilters = this._getFilters();
-                oBindingParams.filters = aFilters;
+                oBindingParams.filters = this._getFilters();
 
                 this._oFormMdl.setProperty("/Busy", true);
                 this._oFormMdl.setProperty("/ShowFooter", false);
@@ -510,30 +615,122 @@ sap.ui.define([
             },
 
             /**
-             * Retrieves generated PDF from backend.
+             * Retrieves generated Summary PDF from backend.
              * @public
              */
-            onDisplayPDF: function() {
+            onPDFSummary: function() {
+                this._getPDF(true);
+            },
+
+            /**
+             * Retrieves generated Detailed PDF from backend.
+             * @public
+             */
+            onPDFDetailed: function () {
+                this._getPDF(false);
+            },
+
+            /**
+             * Retrieves generated PDF from backend.
+             * @private
+             * @param {boolean} bSummary Identifies summary (true) or detailed (false) PDF
+             */
+            _getPDF: function (bSummary) {
                 var aFilters = [];
 
                 this._getFilters().forEach((oFilter) => {
-                    if (oFilter.getPath() !== "Test" &&
-                        oFilter.getPath() !== "Report") {
-                        aFilters.push(oFilter);
+                    switch (oFilter.getPath()) {
+                        case "CompanyCode":
+                        case "FiscalYear":
+                        case "Period":
+                        case "":
+                            aFilters.push(oFilter);
+                            break;
                     }
                 });
-                
+
+                var aDocNumFilter = this._getFilter(this._oConstant["DOCUMENT_NO_PROP"]);
+                if (aDocNumFilter) aFilters.push(aDocNumFilter); 
+
+                aFilters.push(new Filter("Summary", FilterOperator.EQ, bSummary));
+                aFilters.push(new Filter("Detailed", FilterOperator.EQ, !bSummary));
+
                 if (aFilters && aFilters.length > 0) {
+                    this._oFormMdl.setProperty("/Busy", true);
+
                     this._oModel.read("/PrintOut", {
                         filters: aFilters,
                         success: (oData) => {
-                            console.log(oData);
+                            if (oData && oData.results && oData.results.length > 0) {
+                                this._displayPDF(oData.results[0]); //expecting only a single response
+                                this._oFormMdl.setProperty("/Busy", false);
+                            }
                         },
                         error: (oError) => {
+                            this._oFormMdl.setProperty("/Busy", false);
                             console.log(oError);
                         }
                     });
                 }
+            },
+
+            /**
+             * Display generated PDF from backend.
+             * @private
+             * @param {Object} oData Data representing PDF response from backend
+             */
+            _displayPDF: function (oData) {
+                var oPDFCode = null;
+                var byteArray = null;
+                var arrFileName = this._getFileNameArray(oData.FileName);
+
+                if (oData.PDF) {
+                    oPDFCode = window.atob(oData.PDF);
+                    byteArray = new Uint8Array(oPDFCode.length);
+
+                    for(var i=0; i<oPDFCode.length; i++) {
+                        byteArray[i] = oPDFCode.charCodeAt(i);
+                    }
+
+                    var oBlob = new Blob([byteArray.buffer], { type: oData.MimeType } );
+                    if (this._oPDFURI) URL.revokeObjectURL(this._oPDFURI);
+                    this._oPDFURI = URL.createObjectURL(oBlob);
+
+                    if (!this._oPDFViewer) this._oPDFViewer = new PDFViewer({ width: "auto" });
+                    this._oPDFViewer.setSource(this._oPDFURI);
+                    this._oPDFViewer.setErrorPlaceholderMessage(oData.Message);
+
+                    this._oPDFViewer.downloadPDF = () => {
+                        FileUtil.save(
+                            byteArray.buffer,
+                            arrFileName[0],
+                            arrFileName[1],
+                            oData.MimeType
+                        );
+                    };
+
+                    this._oPDFViewer.open();
+                } else {
+                    MessageBox.warning(oData.Message);
+                }
+            },
+
+            /**
+             * Splits a filename string as an array
+             * @private
+             * @param {string} sFileName Filename string with extension
+             * @returns {Array} Array of containing file name [0] and extension [1]
+             */
+            _getFileNameArray: function (sFileName) {
+                var arrFileNameParts = ["Dummy", "pdf"];
+                var iExtSeparator = sFileName.lastIndexOf(".");
+
+                if (iExtSeparator > 0) { //dot is not at the beginning of the string
+                    arrFileNameParts[0] = (sFileName.substring(0, iExtSeparator)); //FileName
+                    arrFileNameParts[1] = (sFileName.substring((iExtSeparator + 1), sFileName.length)); //Extension
+                }
+
+                return arrFileNameParts;
             },
 
             /**
