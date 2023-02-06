@@ -3,7 +3,11 @@ sap.ui.define([], function () {
     return {
         "FORM_OBJECT": {
             "CompanyCode": [],
-            "Report": false
+            "Report": false,
+            "Busy": false,
+            "PrintOut": false,
+            "ShowFooter": false,
+            "Simulate": false
         },
         "COMPANY_CODE_PROP": "CompanyCode",
         "COMPANY_CODE_TEXT": "CompanyCodeName",

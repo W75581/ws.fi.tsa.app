@@ -4,10 +4,9 @@
 
 sap.ui.define([
         "sap/ui/core/UIComponent",
-        "sap/ui/Device",
         "ws/fi/tsa/app/model/models"
     ],
-    function (UIComponent, Device, models) {
+    function (UIComponent, models) {
         "use strict";
 
         return UIComponent.extend("ws.fi.tsa.app.Component", {

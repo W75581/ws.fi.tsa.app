@@ -1,21 +1,27 @@
 sap.ui.define([
     "sap/ui/core/mvc/Controller",
-    'sap/m/ColumnListItem',
-    'sap/m/Label',
-    'sap/m/Token',
-    'sap/m/SearchField',
-    'sap/m/MessageToast',
-    'sap/ui/table/Column',
-	'sap/m/Column',
-    'sap/ui/model/Filter',
-    'sap/ui/model/FilterOperator',
-    'sap/ui/model/type/String',
-    'ws/fi/tsa/app/utils/Validator'
+    "sap/ui/model/json/JSONModel",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator",
+    "sap/ui/model/type/String",
+    "sap/ui/table/Column",
+    "sap/m/Column",
+    "sap/m/ColumnListItem",
+    "sap/m/Label",
+    "sap/m/Token",
+    "sap/m/SearchField",
+    "sap/m/MessageToast",
+    "sap/m/MessageBox",
+    "ws/fi/tsa/app/utils/Validator"
 ],
     /**
      * @param {typeof sap.ui.core.mvc.Controller} Controller
      */
-    function (Controller, ColumnListItem, Label, Token, SearchField, MessageToast, UIColumn, MColumn, Filter, FilterOperator, TypeString, Validator) {
+    function (Controller,
+            JSONModel, Filter, FilterOperator, TypeString,
+            UIColumn,
+            MColumn, ColumnListItem, Label, Token, SearchField, MessageToast, MessageBox,
+            Validator) {
         "use strict";
 
         return Controller.extend("ws.fi.tsa.app.controller.Main", {
@@ -29,15 +35,17 @@ sap.ui.define([
              * @public
              */
             onInit: function () {
-                this._oConstant = this.getOwnerComponent() ? this.getOwnerComponent().getModel("constant").getData() : undefined;
-                this._oModel = this.getOwnerComponent().getModel();
+                var oComponent = this.getOwnerComponent();
+                this._oConstant = oComponent ? oComponent.getModel("constant").getData() : undefined;
+                this._oModel = oComponent.getModel();
 
                 var oFormObject = this._oConstant["FORM_OBJECT"];
-                var oModel = new sap.ui.model.json.JSONModel(oFormObject);
+                var oModel = new JSONModel(oFormObject);
                 this.getView().setModel(oModel,"mdlForm");
                 this._oFormMdl = this.getView().getModel("mdlForm");
-                this._bSimulate = true;
                 this._setDefaultPstDate();
+
+                this._oSmartTable = this.byId("idMainTable");
             },
 
             /**
@@ -87,14 +95,6 @@ sap.ui.define([
             },
 
             /**
-             * Gets smart table instance
-             * @private
-             */
-             _getSmartTableById: function () {
-                return this.getView().byId("idMainTable");
-            },
-
-            /**
              * Generic method for getting model values as filters
              * @private
              * @returns {sap.ui.model.Filter} Filter object representing the filter
@@ -138,13 +138,9 @@ sap.ui.define([
                 if (aCompanyCodeFilter) aFilters.push(aCompanyCodeFilter);
 
                 aFilters.push(new Filter("FiscalYear", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["FISCAL_YEAR_PROP"])));
-
-                var aPeriodKeys = this._oFormMdl.getProperty("/" + this._oConstant["FISCAL_PERIOD_PROP"]);
-                aPeriodKeys.forEach((value) => {
-                    aFilters.push(new Filter("Period", FilterOperator.EQ, value));
-                });
+                aFilters.push(new Filter("Period", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["FISCAL_PERIOD_PROP"])));
                 
-                if (this._bSimulate === true) {
+                if (this._oFormMdl.getProperty("/Simulate") === true) {
                     var bReport = this._oFormMdl.getProperty("/" + this._oConstant["REPORT_PROP"]);
                     if (bReport === true) {
                         aFilters.push(new Filter("Test", FilterOperator.EQ, false));
@@ -364,7 +360,9 @@ sap.ui.define([
                     }
                     else {
                         iIndex = aKeys.findIndex(object => { return object.key === oToken.getKey()});
-                        this._oVHD._oFilterPanel._oConditionPanel.removeCondition(oToken.getKey().replace("range", "condition"));
+                        if (this._oVHD &&
+                            this._oVHD._oFilterPanel &&
+                            this._oVHD._oFilterPanel._oConditionPanel) this._oVHD._oFilterPanel._oConditionPanel.removeCondition(oToken.getKey().replace("range", "condition"));
                     }
                     
                     if (iIndex >= 0) aKeys.splice(iIndex, 1);
@@ -400,37 +398,21 @@ sap.ui.define([
                 }
             },
 
-            /**
-             * Apply Fiscal Year to Fiscal Year Period as filter.
-             * @public
-             * @param {sap.ui.base.Event} oEvent from the combobox
-             */
-            onSelFiscalYear: function(oEvent) {
-                var aFilters = [];
-                var sFilterValue = oEvent.getSource().getSelectedKey();
-                var oFisYrPrd = this.getView().byId("idComboBxFisYrPrd");
-                var oBinding = oFisYrPrd.getBinding("items");
-                if (sFilterValue){
-                    aFilters.push( new Filter("FiscalYear", FilterOperator.EQ, sFilterValue) );
-                }
-                oBinding.filter(aFilters, sap.ui.model.FilterType.Application);
-            },
-
             
             /**
              * Generates the Test Run of Report.
              * @public
              */
              onSimulateForm: function () {
-                if (!this._getValidator().validate(this.getView().byId("idMainForm"))) {
+                if (!this._getValidator().validate(this.byId("idMainForm"))) {
                     MessageToast.show(this._getResourceText("validationMessage"), {
                         closeOnBrowserNavigation: false
                     });
                     return;
                 }
 
-                this._bSimulate = true;
-                this._getSmartTableById().rebindTable();
+                this._oFormMdl.setProperty("/Simulate", true);
+                this._oSmartTable.rebindTable();
             },
 
             /**
@@ -441,9 +423,12 @@ sap.ui.define([
                 this._clearControl("idMulInpCompCode", this._oConstant["COMPANY_CODE_PROP"]);
                 this._clearControl("idComboBxFisYr", this._oConstant["FISCAL_YEAR_PROP"]);
                 this._clearControl("idComboBxFisYrPrd", this._oConstant["FISCAL_PERIOD_PROP"]);
+                this._clearControl("idCBRprtOnly", this._oConstant["REPORT_PROP"]);
                 this._setDefaultPstDate();
 
-                this._oVHD._oFilterPanel._oConditionPanel.setConditions([]);
+                if (this._oVHD &&
+                    this._oVHD._oFilterPanel &&
+                    this._oVHD._oFilterPanel._oConditionPanel) this._oVHD._oFilterPanel._oConditionPanel.setConditions([]);
             },
 
             /**
@@ -465,6 +450,10 @@ sap.ui.define([
                     case "sap.m.MultiInput":
                         oControl.removeAllTokens();
                         this._oFormMdl.setProperty("/" + sProperty, []);
+                        break;
+                    case "sap.m.CheckBox":
+                        this._oFormMdl.setProperty("/" + sProperty, false);
+                        break;
                 }
             },
 
@@ -474,10 +463,30 @@ sap.ui.define([
              * @param {sap.ui.base.Event} oEvent from the smart filter table
              */
              onBeforeRebindTable: function(oEvent) {
-                this._getSmartTableById().getTable().removeSelections();
                 var oBindingParams = oEvent.getParameter("bindingParams");
                 var aFilters = this._getFilters();
                 oBindingParams.filters = aFilters;
+
+                this._oFormMdl.setProperty("/Busy", true);
+                this._oFormMdl.setProperty("/ShowFooter", false);
+                this._oFormMdl.setProperty("/PrintOut", false);
+                this._addBindingListener(oBindingParams, "dataReceived", this._onDataReceived.bind(this));
+            },
+
+            /**
+             * Handles dataReceived event of SmartTable
+             * @private
+             * @param {sap.ui.base.Event} oEvent
+             */
+            _onDataReceived: function (oEvent) {
+                var iDataLength = oEvent.getParameter("data")["results"].length;
+                this._oFormMdl.setProperty("/Busy", false);
+                
+                if(this._oFormMdl.getProperty("/Simulate") && !this._oFormMdl.getProperty("/Report") && iDataLength > 0) {
+                    this._oFormMdl.setProperty("/ShowFooter", true);
+                } else if (iDataLength > 0) {
+                    this._oFormMdl.setProperty("/PrintOut", true);
+                }
             },
 
             /**
@@ -485,15 +494,46 @@ sap.ui.define([
              * @public
              */
              onConfirmPost: function() {
-                this._bSimulate = false;
-                var aItems = this._getSmartTableById().getTable().getItems();
-                
-                if (aItems.length < 1) {
-                    MessageToast.show(this._getResourceText("saveErrMessage"));
-                    return;
-                }
+                MessageBox.confirm(this._getResourceText("confirmPosting"), {
+                    onClose: (oAction) => {
+                        if (oAction === MessageBox.Action.YES) {
+                            this._oFormMdl.setProperty("/Simulate", false);
+                            this._oSmartTable.rebindTable();
+                        }
+                    },
+                    actions: [
+                        MessageBox.Action.YES,
+                        MessageBox.Action.NO
+                    ],
+                    emphasizedAction: MessageBox.Action.NO
+                });
+            },
 
-                this._getSmartTableById().rebindTable();
+            /**
+             * Retrieves generated PDF from backend.
+             * @public
+             */
+            onDisplayPDF: function() {
+                var aFilters = [];
+
+                this._getFilters().forEach((oFilter) => {
+                    if (oFilter.getPath() !== "Test" &&
+                        oFilter.getPath() !== "Report") {
+                        aFilters.push(oFilter);
+                    }
+                });
+                
+                if (aFilters && aFilters.length > 0) {
+                    this._oModel.read("/PrintOut", {
+                        filters: aFilters,
+                        success: (oData) => {
+                            console.log(oData);
+                        },
+                        error: (oError) => {
+                            console.log(oError);
+                        }
+                    });
+                }
             },
 
             /**
@@ -504,6 +544,30 @@ sap.ui.define([
             onNavBack: function () {
                 // eslint-disable-next-line sap-no-history-manipulation
                 history.go(-1);
+            },
+
+            /**
+             * Event handler for data Received/Requested post sapui5 1.56.
+             * Referenced from https://blogs.sap.com/2019/11/04/handle-datareceived-event-in-smart-table-after-version-1.56-in-sapui5/
+             * @private
+             * @param {Object} oBindingInfo Binding information from calling event
+             * @param {string} sEventName Name of Event to Handle
+             * @param {function} fHandler Function to execute if the event is triggered
+             */
+            _addBindingListener: function (oBindingInfo, sEventName, fHandler) {
+                oBindingInfo.events = oBindingInfo.events || {};
+
+                if (!oBindingInfo.events[sEventName]) {
+                    oBindingInfo.events[sEventName] = fHandler;
+                } else {
+                    // Wrap the event handler of the other party to add our handler.
+                    var fOriginalHandler = oBindingInfo.events[sEventName];
+                    oBindingInfo.events[sEventName] = function() {
+                        fHandler.apply(this, arguments);
+                        fOriginalHandler.apply(this, arguments);
+                    };
+                }
             }
+
         });
     });

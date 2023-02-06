@@ -20,9 +20,9 @@ sap.ui.define([
                 var oModel = new JSONModel(Device);
                 oModel.setDefaultBindingMode("OneWay");
                 return oModel;
-        },
+            },
 
-        /**
+            /**
              * Convenience method for creating the model for constants
              * @public
              * @returns {sap.ui.model.json.JSONModel} the corresponding model
@@ -31,6 +31,7 @@ sap.ui.define([
                 var oModel = new JSONModel(constants);
                 oModel.setDefaultBindingMode("OneWay");
                 return oModel;
-        }
+            }
+
     };
 });
