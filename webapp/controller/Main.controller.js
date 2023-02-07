@@ -584,12 +584,21 @@ sap.ui.define([
              * @param {sap.ui.base.Event} oEvent
              */
             _onDataReceived: function (oEvent) {
-                var iDataLength = oEvent.getParameter("data")["results"].length;
+                var arrData = oEvent.getParameter("data")["results"];
+                var iDataLength = arrData.length;
+                var arrDocNum = this._oFormMdl.getProperty("/PostedDocumentNumberSCC");
                 this._oFormMdl.setProperty("/Busy", false);
                 
                 if(this._oFormMdl.getProperty("/Simulate") && !this._oFormMdl.getProperty("/Report") && iDataLength > 0) {
                     this._oFormMdl.setProperty("/ShowFooter", true);
                 } else if (iDataLength > 0) {
+                    var arrUniqueEntries = [];
+                    arrData.forEach((oResult) => {
+                        if(arrUniqueEntries.indexOf(oResult.PostedDocumentNumberSCC) < 0) {
+                            arrUniqueEntries.push(oResult.PostedDocumentNumberSCC);
+                            arrDocNum.push({DocumentNumber:oResult.PostedDocumentNumberSCC});
+                        }
+                    });
                     this._oFormMdl.setProperty("/PrintOut", true);
                 }
             },
@@ -619,7 +628,7 @@ sap.ui.define([
              * @public
              */
             onPDFSummary: function() {
-                this._getPDF(true);
+                this._getPDF(true, false);
             },
 
             /**
@@ -627,15 +636,24 @@ sap.ui.define([
              * @public
              */
             onPDFDetailed: function () {
-                this._getPDF(false);
+                this._getPDF(false, true);
+            },
+
+            /**
+             * Retrieves generated Summary and Detailed PDF from backend.
+             * @public
+             */
+            onPDFBoth: function () {
+                this._getPDF(true, true);
             },
 
             /**
              * Retrieves generated PDF from backend.
              * @private
-             * @param {boolean} bSummary Identifies summary (true) or detailed (false) PDF
+             * @param {boolean} bSummary Identifies if Summary
+             * * @param {boolean} bDetailed Identifies if Detailed
              */
-            _getPDF: function (bSummary) {
+            _getPDF: function (bSummary, bDetailed) {
                 var aFilters = [];
 
                 this._getFilters().forEach((oFilter) => {
@@ -661,7 +679,7 @@ sap.ui.define([
                 if (aDocNumFilter) aFilters.push(aDocNumFilter); 
 
                 aFilters.push(new Filter("Summary", FilterOperator.EQ, bSummary));
-                aFilters.push(new Filter("Detailed", FilterOperator.EQ, !bSummary));
+                aFilters.push(new Filter("Detailed", FilterOperator.EQ, bDetailed));
 
                 if (aFilters && aFilters.length > 0) {
                     this._oFormMdl.setProperty("/Busy", true);
@@ -676,7 +694,9 @@ sap.ui.define([
                         },
                         error: (oError) => {
                             this._oFormMdl.setProperty("/Busy", false);
-                            console.log(oError);
+                            MessageBox.error(this._getResourceText("pdfErrMessage"), {
+                                details: oError
+                            });
                         }
                     });
                 }
@@ -749,6 +769,22 @@ sap.ui.define([
             onNavBack: function () {
                 // eslint-disable-next-line sap-no-history-manipulation
                 history.go(-1);
+            },
+
+            /**
+             * Formatter function for removing leading zeroes
+             * @public
+             * @param sNum String input to remove leading zeroes
+             * @returns Number without leading zeroes
+             */
+            removeLeadingZeroes: function (sNum) {
+                var iNum = parseInt(sNum);
+
+                if (iNum && !isNaN(iNum)) {
+                    return iNum + "";
+                }
+
+                return sNum;
             },
 
             /**

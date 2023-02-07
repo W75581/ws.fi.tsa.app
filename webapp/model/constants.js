@@ -4,6 +4,7 @@ sap.ui.define([], function () {
         "FORM_OBJECT": {
             "CompanyCode": [],
             "FIDocumentNumber": [],
+            "PostedDocumentNumberSCC": [],
             "Report": false,
             "Busy": false,
             "PrintOut": false,

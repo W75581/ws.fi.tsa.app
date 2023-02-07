@@ -52,19 +52,14 @@
                         </layoutData>
                     </ComboBox>
                     <ComboBox required="true" id="idComboBxFisYrPrd" selectedKey="{mdlForm>/Period}" items="{path: '/ZFI_IQ_FY_PERIOD'}">
-                        <core:ListItem key="{FiscalPeriod}" text="{FiscalPeriod}" />
+                        <core:ListItem key="{FiscalPeriod}" text="{ path: 'FiscalPeriod', formatter: '.removeLeadingZeroes' }" />
                     </ComboBox>
 
-                    <Label text="{i18n>docNum}" />
-                    <MultiInput id="idMulInpDocNum" value="{FIDocumentNumber}" tokens="{path: 'mdlForm>/FIDocNumVal'}" name="FIDocumentNumber"
-                        valueHelpOnly="true" valueHelpRequest="onDocNumValueHelpRequested" tokenUpdate="onUpdateDocNumTokens">
-                        <tokens>
-                            <Token key="{mdlForm>key}" text="{mdlForm>text}" />
-                        </tokens>
-                    </MultiInput>
+                    <Label text="{i18n>reportOnly}" />
+                    <CheckBox id="idCBRprtOnly" selected="{mdlForm>/Report}" />
 
                     <Label text="{i18n>postDate}" />
-                    <DatePicker id="idMulInpPstDte" placeholder="{i18n>plceHldrPostDte}" change="handlePostDateChg" 
+                    <DatePicker id="idMulInpPstDte" placeholder="{i18n>plceHldrPostDte}" change="handlePostDateChg" enabled="{= !${mdlForm>/Report} }"
                         value="{
                             'type': 'sap.ui.model.type.Date',
                             'path': 'mdlForm>/PostingDate',
@@ -74,7 +69,7 @@
                         }" />
 
                     <Label text="{i18n>docDate}" />
-                    <DatePicker id="idMulInpDocDte" placeholder="{i18n>plceHldrPostDte}" change="handlePostDateChg" 
+                    <DatePicker id="idMulInpDocDte" placeholder="{i18n>plceHldrPostDte}" change="handlePostDateChg" enabled="{= !${mdlForm>/Report} }"
                         value="{
                             'type': 'sap.ui.model.type.Date',
                             'path': 'mdlForm>/DocumentDate',
@@ -82,9 +77,6 @@
                                 'pattern': 'dd/MM/y'
                             }
                         }" />
-
-                    <Label text="{i18n>reportOnly}" />
-                    <CheckBox id="idCBRprtOnly" selected="{mdlForm>/Report}" />
 
                 </f:content>
             </f:SimpleForm>
@@ -112,11 +104,17 @@
                 <smartTable:customToolbar>
                     <OverflowToolbar design="Transparent">
                         <ToolbarSpacer />
+                        <Label text="{i18n>docNum}" class="sapUiTinyMarginEnd" visible="{mdlForm>/PrintOut}" />
+                        <MultiComboBox id="idMulInpDocNo" selectedKeys="{mdlForm>/FIDocumentNumber}" name="FIDocumentNumber" items="{mdlForm>/PostedDocumentNumberSCC}" visible="{mdlForm>/PrintOut}"
+                            width="300px" class="sapUiSmallMarginTopBottom">
+                            <core:Item key="{mdlForm>DocumentNumber}" text="{mdlForm>DocumentNumber}" />
+                        </MultiComboBox>
                         <MenuButton  tooltip="{i18n>printOut}" icon="sap-icon://pdf-attachment" enabled="{mdlForm>/PrintOut}">
                             <menu>
                                 <Menu>
                                     <MenuItem text="{i18n>summary}" icon="sap-icon://collapse-all" press="onPDFSummary" />
                                     <MenuItem text="{i18n>detailed}" icon="sap-icon://expand-all" press="onPDFDetailed" />
+                                    <MenuItem text="{i18n>sumdet}" icon="sap-icon://menu" press="onPDFBoth" />
                                 </Menu>
                             </menu>
                         </MenuButton>
