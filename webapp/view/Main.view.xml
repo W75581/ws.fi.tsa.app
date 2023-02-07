@@ -123,7 +123,7 @@
                     </OverflowToolbar>
                 </smartTable:customToolbar>
 
-                <table:Table alternateRowColors="true" selectionMode="None" threshold="0" />
+                <table:Table alternateRowColors="true" selectionMode="None" threshold="0" visibleRowCountMode="Auto" />
 
             </smartTable:SmartTable>
         </semantic:content>
