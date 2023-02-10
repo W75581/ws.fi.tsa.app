@@ -598,21 +598,21 @@ sap.ui.define([
             _onDataReceived: function (oEvent) {
                 var arrData = oEvent.getParameter("data")["results"];
                 var iDataLength = arrData.length;
-                var arrDocNum = this._oFormMdl.getProperty("/PostedDocumentNumberSCC");
+                var arrDocNum = [];
                 this._oFormMdl.setProperty("/Busy", false);
                 
                 if(this._oFormMdl.getProperty("/Simulate") && !this._oFormMdl.getProperty("/Report") && iDataLength > 0) {
                     this._oFormMdl.setProperty("/ShowFooter", true);
                 } else if (iDataLength > 0) {
-                    var arrUniqueEntries = [];
                     arrData.forEach((oResult) => {
-                        if(arrUniqueEntries.indexOf(oResult.PostedDocumentNumberSCC) < 0) {
-                            arrUniqueEntries.push(oResult.PostedDocumentNumberSCC);
+                        if(arrDocNum.indexOf(oResult.PostedDocumentNumberSCC) < 0) {
                             arrDocNum.push({DocumentNumber:oResult.PostedDocumentNumberSCC});
                         }
                     });
                     this._oFormMdl.setProperty("/PrintOut", true);
                 }
+
+                this._oFormMdl.setProperty("/PostedDocumentNumberSCC", arrDocNum);
             },
 
             /**
