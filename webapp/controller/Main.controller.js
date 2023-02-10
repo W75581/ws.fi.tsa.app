@@ -604,8 +604,10 @@ sap.ui.define([
                 if(this._oFormMdl.getProperty("/Simulate") && !this._oFormMdl.getProperty("/Report") && iDataLength > 0) {
                     this._oFormMdl.setProperty("/ShowFooter", true);
                 } else if (iDataLength > 0) {
+                    var arrUniqueEntries = [];
                     arrData.forEach((oResult) => {
-                        if(arrDocNum.indexOf(oResult.PostedDocumentNumberSCC) < 0) {
+                        if(arrUniqueEntries.indexOf(oResult.PostedDocumentNumberSCC) < 0) {
+                            arrUniqueEntries.push(oResult.PostedDocumentNumberSCC);
                             arrDocNum.push({DocumentNumber:oResult.PostedDocumentNumberSCC});
                         }
                     });
