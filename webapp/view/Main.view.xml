@@ -280,24 +280,18 @@
                             </table:template>
                         </table:Column>
 
-                        <table:Column hAlign="Center" width="75px"
+                        <table:Column width="350px"
                             customData:p13nData='\{"columnKey": "Message", "leadingProperty":"Message", "columnIndex": "40"}'>
                             <Label text="{/#TSAPostingType/Message/@sap:label}" />
                             <table:template>
-                                <Button type="Transparent" icon="sap-icon://display" visible="{= ${Message} !== '' }" press=".onShowMessage" />
+                                <ExpandableText class="sapUiTinyMarginTopBottom" text="{Message}" overflowMode="InPlace" />
                             </table:template>
                         </table:Column>
 
                     </table:columns>
 
-                    <table:rowActionTemplate>
-                        <table:RowAction>
-                            <table:RowActionItem icon="sap-icon://display" type="Custom" press="onShowMessage" />
-                        </table:RowAction>
-                    </table:rowActionTemplate>
-
                     <table:rowSettingsTemplate>
-                        <table:RowSettings highlight="{= ${mdlForm>/Report} ? 'None' : ${PostedDocumentNumberSCC} !== '' || ${PostedDocumentNumberRCC} !== '' ? 'Success' : ${Message} !== '' ? 'Error' : 'None' }" />
+                        <table:RowSettings highlight="{= ${mdlForm>/Simulate}  ? 'None' : ${PostedDocumentNumberSCC} !== '' || ${PostedDocumentNumberRCC} !== '' ? 'Success' : ${Message} !== '' ? 'Error' : 'None' }" />
                     </table:rowSettingsTemplate>
 
                 </table:Table>
