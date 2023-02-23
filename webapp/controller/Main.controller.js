@@ -52,7 +52,6 @@ sap.ui.define([
                 this._oSmartTable = this.byId("idMainTable");
                 this._oSmartFilterBar = this.byId("idSFBFilter");
                 this._oMessagePopover = this.byId("idMPMessages");
-                this._oMessageDialog = this.byId("idMessageDialog");
                 this._oPostDateInput = this.byId("idMulInpPstDte");
                 this._oDocDateInput = this.byId("idMulInpDocDte");
 
