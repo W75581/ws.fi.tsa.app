@@ -1,32 +1,29 @@
 sap.ui.define([
     "sap/ui/core/mvc/Controller",
     "sap/ui/core/util/File",
+    "sap/ui/core/library",
+    "sap/ui/core/Core",
     "sap/ui/model/json/JSONModel",
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
-    "sap/ui/model/type/String",
-    "sap/ui/table/Column",
-    "sap/m/Column",
-    "sap/m/ColumnListItem",
-    "sap/m/Label",
-    "sap/m/Token",
-    "sap/m/SearchField",
-    "sap/m/MessageToast",
     "sap/m/MessageBox",
     "sap/m/PDFViewer",
-    "sap/base/security/URLListValidator",
-    "ws/fi/tsa/app/utils/Validator"
+    "sap/ui/export/Spreadsheet",
+    "sap/ui/export/library",
+    "sap/base/security/URLListValidator"
 ],
     /**
      * @param {typeof sap.ui.core.mvc.Controller} Controller
      */
-    function (Controller, FileUtil,
-            JSONModel, Filter, FilterOperator, TypeString,
-            UIColumn,
-            MColumn, ColumnListItem, Label, Token, SearchField, MessageToast, MessageBox, PDFViewer,
-            URLListValidator,
-            Validator) {
+    function (Controller, FileUtil, coreLibrary, Core,
+            JSONModel, Filter, FilterOperator,
+            MessageBox, PDFViewer,
+            Spreadsheet, exportLibrary,
+            URLListValidator) {
         "use strict";
+
+        var MessageType = coreLibrary.MessageType;
+        var EdmType = exportLibrary.EdmType;
 
         return Controller.extend("ws.fi.tsa.app.controller.Main", {
             
@@ -42,16 +39,38 @@ sap.ui.define([
                 URLListValidator.add("blob");
 
                 var oComponent = this.getOwnerComponent();
-                this._oConstant = oComponent ? oComponent.getModel("constant").getData() : undefined;
-                this._oModel = oComponent.getModel();
+                var oView = this.getView();
 
-                var oFormObject = JSON.parse(JSON.stringify(this._oConstant["FORM_OBJECT"])); //deep copy
-                var oModel = new JSONModel(oFormObject);
-                this.getView().setModel(oModel,"mdlForm");
-                this._oFormMdl = this.getView().getModel("mdlForm");
+                this._oModel = oComponent.getModel();
+                this._oModel.setSizeLimit(999999999);
+
+                this._oConstant = oComponent.getModel("constant").getData();
+                var oFormObject = JSON.parse(JSON.stringify(this._oConstant.FORM_OBJECT)); //deep copy
+                this._oFormMdl = new JSONModel(oFormObject);
+                oView.setModel(this._oFormMdl, "mdlForm");
 
                 this._oSmartTable = this.byId("idMainTable");
-                this._oDocumentNumInput = this.byId("idMulInpDocNum");
+                this._oSmartFilterBar = this.byId("idSFBFilter");
+                this._oMessagePopover = this.byId("idMPMessages");
+                this._oMessageDialog = this.byId("idMessageDialog");
+                this._oPostDateInput = this.byId("idMulInpPstDte");
+                this._oDocDateInput = this.byId("idMulInpDocDte");
+
+                this._oMessageIndicatorButton = this.byId("idMIButton");
+                this._oMessageIndicatorButton.addEventDelegate({
+                    onAfterRendering: () => {
+                        if (this._oMessagePopover) {
+                            this._oMessagePopover.openBy(this._oMessageIndicatorButton);
+                        }
+                    }
+                });
+
+                this._oMessageManager = Core.getMessageManager();
+                this._oMessageManager.removeAllMessages();
+                this._oMessageMdl = this._oMessageManager.getMessageModel();
+                oView.setModel(this._oMessageMdl, "message");
+
+                this._handleMetadataLoading();
 
                 oComponent.getRouter().getRoute("RouteMain").attachPatternMatched(this._onTSAMatched, this);
             },
@@ -61,8 +80,9 @@ sap.ui.define([
              * @private
              */
             _onTSAMatched: function () {
-                if (this._oFormMdl) this._oFormMdl.setData(JSON.parse(JSON.stringify(this._oConstant["FORM_OBJECT"])));
+                if (this._oFormMdl) this._oFormMdl.setData(JSON.parse(JSON.stringify(this._oConstant.FORM_OBJECT)));
                 if (this._oPDFURI) URL.revokeObjectURL(this._oPDFURI);
+                if (this._oMessageManager && this._oMessageMdl) this._oMessageMdl.setData([]);
 
                 this._setDefaultPstDate();
             },
@@ -81,33 +101,128 @@ sap.ui.define([
              * @public
              */
              _setDefaultPstDate: function() {
-                var sCurrDate = new Date();
-                var iCurrMonth = sCurrDate.getMonth();
-                var iCurrYear = sCurrDate.getFullYear();
-                var sLastDay = new Date(iCurrYear, iCurrMonth + 1, 0);
-                this._oFormMdl.setProperty("/PostingDate", sLastDay);
-                this._oFormMdl.setProperty("/DocumentDate", sLastDay);
-            },
-
-            /**
-             * Returns the validator.
-             * @public
-             * @returns {object} returns the validator
-             */
-             _getValidator: function () {
-                if (!this._oValidator) {
-                    this._oValidator = new Validator();
+                var oCurrDate = new Date();
+                var iCurrMonth = oCurrDate.getMonth();
+                var iCurrYear = oCurrDate.getFullYear();
+                var oLastDay = null;
+                try {
+                    oLastDay = this._oConstant.BASE_DATE_FORMAT.parse(
+                        this._oConstant.NON_UTC_FORMAT.format(new Date(iCurrYear, iCurrMonth + 1, 0))
+                    );
+                } catch (oEx) {}
+                
+                if (oLastDay) {
+                    this._oFormMdl.setProperty("/PostingDate", oLastDay);
+                    this._oFormMdl.setProperty("/DocumentDate", oLastDay);
                 }
-                return this._oValidator;
             },
 
             /**
-             * Getter for the resource bundle.
-             * @private
-             * @returns {sap.ui.model.resource.ResourceModel} the resourceModel of the component
+             * Handle initialized event of SmartFilterbar.
+             * Add a change handler to period change event
+             * @public
+             * @param {sap.ui.base.Event} oEvent from the smart filter bar
              */
-            _getResourceBundle: function () {
-                return this.getOwnerComponent().getModel("i18n").getResourceBundle();
+            onSmartFilterInitialized: function (oEvent) {
+                var oFilterBar = oEvent.getSource();
+
+                //non-elegant solution until made available by framework
+                var oPeriodControl = null, oFiscalYearControl = null;
+                try {
+                    oPeriodControl = oFilterBar.getControlByKey("Period"); //deprecated as of 1.99
+                    oFiscalYearControl = oFilterBar.getControlByKey("FiscalYear"); //deprecated as of 1.99
+                } catch (oEx) { console.log(oEx); }
+                
+                if (oPeriodControl) oPeriodControl.attachChange(this._onPeriodChanged.bind(this));
+                if (oFiscalYearControl) oFiscalYearControl.attachChange(this._onFYChanged.bind(this));
+            },
+
+            /**
+             * Update posting and document date based on selected period
+             * @private
+             */
+            _onPeriodChanged: function (oEvent) {
+                if (this._oSmartFilterBar && !this._oFormMdl.getProperty("/Report")) {
+                    var oFilterData = this._oSmartFilterBar.getFilterData();
+                    this._getPeriodEndDate(oFilterData.FiscalYear ?
+                        oFilterData.FiscalYear :
+                        this._oConstant.BASE_YEAR,
+                        oEvent.getParameter("value"));
+                }
+            },
+
+            /**
+             * Update posting and document date based on selected FY
+             * @private
+             */
+            _onFYChanged: function (oEvent) {
+                if (this._oSmartFilterBar && !this._oFormMdl.getProperty("/Report")) {
+                    var oFilterData = this._oSmartFilterBar.getFilterData();
+                    this._getPeriodEndDate(oEvent.getParameter("value"),
+                        oFilterData.Period ?
+                        oFilterData.Period : "");
+                }
+            },
+
+            _getPeriodEndDate: function (sFiscalYear, sPeriod) {
+                if (sFiscalYear && sPeriod) {
+                    this._oFormMdl.setProperty("/SearchEnabled", false);
+                    this._oPostDateInput.setBusy(true);
+                    this._oDocDateInput.setBusy(true);
+
+                    var sKey = this._oModel.createKey("/ZFI_IQ_FY_PERIOD", {
+                        FiscalPeriod: sPeriod,
+                        FiscalYear: sFiscalYear
+                    });
+
+                    new Promise((fnResolve, fnReject) => {
+                        this._oModel.read(sKey, {
+                            success: fnResolve,
+                            error: fnReject
+                        });
+                    }).then((oData) => {
+                        if (oData && oData.FiscalPeriodEndDate) {
+                            var oDateFormat = this._oConstant.BASE_DATE_FORMAT;
+
+                            this._oFormMdl.setProperty("/PostingDate", oDateFormat.parse(oDateFormat.format(oData.FiscalPeriodEndDate)));
+                            this._oFormMdl.setProperty("/DocumentDate", oDateFormat.parse(oDateFormat.format(oData.FiscalPeriodEndDate)));
+                        }
+                    }).catch(() => {
+                        this._oFormMdl.setProperty("/ShowFooter", true);
+                        this._oFormMdl.setProperty("/Posting", true); //just to hide the posting button
+                        this._oFormMdl.setProperty("/ExportEnabled", false);
+                        this._oFormMdl.setProperty("/PrintOut", false);
+
+                        this._setDefaultPstDate();
+                    }).finally(() => {
+                        this._oFormMdl.setProperty("/SearchEnabled", true);
+                        this._oPostDateInput.setBusy(false);
+                        this._oDocDateInput.setBusy(false);
+                    });
+                } else {
+                    this._setDefaultPstDate();
+                    this._oFormMdl.setProperty("/SearchEnabled", true);
+                }
+            },
+
+            /**
+             * Handle onAssignedFiltersChanged event of SmartFilterbar.
+             * Display the filters as text when collapsed
+             * @public
+             */
+            onAssignedFiltersChanged: function() {
+                if (this._oSmartFilterBar && this._oFormMdl) {
+                    this._oFormMdl.setProperty("/FiltersSnappedText", this._oSmartFilterBar.retrieveFiltersWithValuesAsText());
+                }
+            },
+
+            /**
+             * Handle filterChange event of SmartFilterbar.
+             * Reset footers when any of the filters are changed
+             * @public
+             */
+            onFilterChanged: function () {
+                this._resetFooterStatus();
             },
 
             /**
@@ -118,476 +233,116 @@ sap.ui.define([
              * @returns {string} the text
             */
             _getResourceText: function (sResource, aParameters) {
-                return this._getResourceBundle().getText(sResource, aParameters);
+                return this.getOwnerComponent().getModel("i18n").getResourceBundle().getText(sResource, aParameters);
             },
 
             /**
-             * Generic method for getting model values as filters
-             * @private
-             * @returns {sap.ui.model.Filter} Filter object representing the filter
-             */
-             _getFilter: function(sProperty) {
-                var aKeys = this._oFormMdl.getProperty("/" + sProperty);
-                var aFilters = [];
-
-                aKeys.forEach(function (sKey) {
-                    if (!sKey.hasOwnProperty("keyField")) {
-                        aFilters.push(new Filter(sProperty, FilterOperator.EQ, sKey));
-                    }
-                    else {
-                        //for definitions
-                        aFilters.push(new Filter(sKey.keyField, FilterOperator[sKey.operation], sKey.value1, sKey.value2));
-                    }  
-                });
-
-                if (aFilters && aFilters.length > 0) {
-                    if (aFilters.length == 1) {
-                        return aFilters[0];
-                    } else {
-                        return new Filter({
-                            filters: aFilters,
-                            and: false
-                        });
-                    }
-                }
-
-                return undefined;
-            },
-
-            /**
-             * Get the filters from Form
-             * @private
-             * @returns {Array} Array of Filters
-             */
-             _getFilters: function() {
-                var aFilters = [];
-                var aCompanyCodeFilter = this._getFilter(this._oConstant["COMPANY_CODE_PROP"]);
-                if (aCompanyCodeFilter) aFilters.push(aCompanyCodeFilter);
-
-                aFilters.push(new Filter("FiscalYear", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["FISCAL_YEAR_PROP"])));
-                aFilters.push(new Filter("Period", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["FISCAL_PERIOD_PROP"])));
-                
-                if (this._oFormMdl.getProperty("/Simulate") === true) {
-                    var bReport = this._oFormMdl.getProperty("/" + this._oConstant["REPORT_PROP"]);
-                    if (bReport === true) {
-                        aFilters.push(new Filter("Test", FilterOperator.EQ, false));
-                    }
-                    else {
-                        aFilters.push(new Filter("Test", FilterOperator.EQ, true));
-                    }
-                    aFilters.push(new Filter("Report", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["REPORT_PROP"])));
-                }
-                else {
-                    aFilters.push(new Filter("PostingDate", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["POSTING_DATE_PROP"])));
-                    aFilters.push(new Filter("DocumentDate", FilterOperator.EQ, this._oFormMdl.getProperty("/" + this._oConstant["DOCUMENT_DATE_PROP"])));
-                    aFilters.push(new Filter("Test", FilterOperator.EQ, false));
-                    aFilters.push(new Filter("Report", FilterOperator.EQ, false));
-                }
-
-                return aFilters;
-            },
-
-            /**
-             * Handles when user selects the Value Help for the multi-input
-             * @param {sap.ui.base.Event} oEvent from the multi-input
+             * Handle beforeVariantFetch event of SmartFilterbar.
+             * Save custom controls
              * @public
              */
-            onValueHelpRequested: function(oEvent) {
-                this._oMultiInput = oEvent.getSource();
-                var sTitle = this._oMultiInput.getLabels()[0].getText();
-                this.sCurrMultiInput = sTitle.replace(/\s+/g, '');
-                this._oBasicSearchField = new SearchField();
-                if (!this.pDialog) {
-                    this.pDialog = this.loadFragment({
-                        name: "ws.fi.tsa.app.view.fragments.CompanyCodeVH"
-                    });
-                }
-                this.pDialog.then(function(oDialog) {
-                    var oFilterBar = oDialog.getFilterBar();
-                    this._oVHD = oDialog;
-                    // Initialise the dialog with model only the first time. Then only open it
-                    if (this._bDialogInitialized) {
-                        // Re-set the tokens from the input and update the table
-                        oDialog.setTokens([]);
-                        oDialog.setTokens(this._oMultiInput.getTokens());
-                        oDialog.update();
-    
-                        oDialog.open();
-                        return;
-                    }
-                    this.getView().addDependent(oDialog);
-
-                    oDialog.setRangeKeyFields([{
-                        label: "Company Code",
-                        key: "CompanyCode",
-                        type: "string",
-                        typeInstance: new TypeString({}, {
-                            maxLength: 7
-                        })
-                    }]);
-    
-                    // Set Basic Search for FilterBar
-                    oFilterBar.setFilterBarExpanded(false);
-                    oFilterBar.setBasicSearch(this._oBasicSearchField);
-    
-                    // Trigger filter bar search when the basic search is fired
-                    this._oBasicSearchField.attachSearch(function() {
-                        oFilterBar.search();
-                    });
-    
-                    oDialog.getTableAsync().then(function (oTable) {
-    
-                        oTable.setModel(this.oProductsModel);
-    
-                        // For Desktop and tabled the default table is sap.ui.table.Table
-                        if (oTable.bindRows) {
-                            // Bind rows to the ODataModel and add columns
-                            oTable.bindAggregation("rows", {
-                                path: "/I_CompanyCode",
-                                events: {
-                                    dataReceived: function() {
-                                        oDialog.update();
-                                    }
-                                }
-                            });
-                            oTable.addColumn(new UIColumn({label: "Company Code", template: "CompanyCode"}));
-                            oTable.addColumn(new UIColumn({label: "Company Name", template: "CompanyCodeName"}));
+            onBeforeVariantFetch: function () {
+                if (this._oSmartFilterBar) {
+                    var bReport = this._oFormMdl.getProperty("/Report");
+                    var oFilterData = {
+                        _CUSTOM: {
+                            CustomReport: bReport
                         }
-    
-                        // For Mobile the default table is sap.m.Table
-                        if (oTable.bindItems) {
-                            // Bind items to the ODataModel and add columns
-                            oTable.bindAggregation("items", {
-                                path: "/I_CompanyCode",
-                                template: new ColumnListItem({
-                                    cells: [new Label({text: "{CompanyCode}"}), new Label({text: "{CompanyCode}"})]
-                                }),
-                                events: {
-                                    dataReceived: function() {
-                                        oDialog.update();
-                                    }
-                                }
-                            });
-                            oTable.addColumn(new MColumn({header: new Label({text: "Company Code"})}));
-                            oTable.addColumn(new MColumn({header: new Label({text: "Company Name"})}));
+                    };
+
+                    if (!bReport) {
+                        oFilterData._CUSTOM.CustomPostingDate = this._oFormMdl.getProperty("/PostingDate");
+                        oFilterData._CUSTOM.CustomDocumentDate = this._oFormMdl.getProperty("/DocumentDate");
+                    }
+
+                    this._oSmartFilterBar.setFilterData(oFilterData);
+                }
+            },
+
+            /**
+             * Handle afterVariantLoad event of SmartFilterbar.
+             * Load values for custom controls
+             * @public
+             */
+            onAfterVariantLoad: function () {
+                if (this._oSmartFilterBar) {
+                    var oFilters = this._oSmartFilterBar.getFilterData();
+
+                    if (oFilters._CUSTOM && this._oFormMdl) {
+                        var bReport = oFilters._CUSTOM.CustomReport;
+                        this._oFormMdl.setProperty("/Report", bReport);
+
+                        if (!bReport) {
+                            var oDateFormat = this._oConstant.VAR_DATE_FORMAT;
+                            try {
+                                this._oFormMdl.setProperty("/PostingDate", oDateFormat.parse(oFilters._CUSTOM.CustomPostingDate));
+                                this._oFormMdl.setProperty("/DocumentDate", oDateFormat.parse(oFilters._CUSTOM.CustomDocumentDate));
+                            } catch (oEx) {}
+                        } else {
+                            this._setDefaultPstDate();
                         }
-                        oDialog.update();
-                    }.bind(this));
-    
-                    oDialog.setTokens(this._oMultiInput.getTokens());
-    
-                    // set flag that the dialog is initialized
-                    this._bDialogInitialized = true;
-                    oDialog.open();
-                }.bind(this));
-            },
-    
-            /**
-             * Called to set the tokens and close the Value Help dialog.
-             * @param {sap.ui.base.Event} oEvent from the ok button
-             * @public
-             */
-             onValueHelpOkPress: function (oEvent) {
-                var aTokens = oEvent.getParameter("tokens");
-                this._oMultiInput.setTokens(aTokens);
-                var sTitle = oEvent.getSource().getTitle().replace(/\s+/g, '');
-                var aKeys = [];
-                aTokens.map((oToken) => { 
-                    if (oToken.data("range") === null) {
-                        aKeys.push(oToken.getKey()); 
                     }
-                    else {
-                        oToken.data("range").key = oToken.getKey();
-                        aKeys.push(oToken.data("range")); 
-                    }
-                });
-                this._oFormMdl.setProperty("/" + sTitle, aKeys);
 
-                this._oVHD.close();
-            },
-    
-            /**
-             * Called to close the Value Help dialog.
-             * @public
-             */
-            onValueHelpCancelPress: function () {
-                this._oVHD.close();
-            },
-
-            /**
-             * Handles when user selects the Value Help for the Document Number multi-input
-             * @param {sap.ui.base.Event} oEvent from the multi-input
-             * @public
-             */
-            onDocNumValueHelpRequested: function (oEvent) {
-                if (this._oDocNumVHD) {
-                    this._oDocNumVHD.open();
-                } else {
-                    this._oDocNumVHD = this.loadFragment({
-                        name: "ws.fi.tsa.app.view.fragments.FIDocumentNumberVH"
-                    });
-
-                    this._oDocNumVHD.then(function(oDialog) {
-                        this._oDocNumVHD = oDialog;
-                        this.getView().addDependent(oDialog);
-                        oDialog.setRangeKeyFields([{
-                            label: this._getResourceText("docNum"),
-                            key: "FIDocumentNumber",
-                            type: "string",
-                            typeInstance: new TypeString({}, {
-                                maxLength: 10
-                            })
-                        }]);
-        
-                        oDialog.setTokens(this._oDocumentNumInput.getTokens());
-                        oDialog.open();
-                    }.bind(this));
-                }
-            },
-
-            /**
-             * Called to set the tokens and close the Document Number Value Help dialog.
-             * @param {sap.ui.base.Event} oEvent from the ok button
-             * @public
-             */
-            onDocNumValueHelpOkPress: function (oEvent) {
-                var aTokens = oEvent.getParameter("tokens");
-                this._oDocumentNumInput.setTokens(aTokens);
-
-                var aKeys = [];
-                aTokens.map((oToken) => { 
-                    if (oToken.data("range") === null) {
-                        aKeys.push(oToken.getKey()); 
-                    }
-                    else {
-                        oToken.data("range").key = oToken.getKey();
-                        aKeys.push(oToken.data("range")); 
-                    }
-                });
-                this._oFormMdl.setProperty("/" + this._oConstant["DOCUMENT_NO_PROP"], aKeys);
-
-                this._oDocNumVHD.close();
-            },
-
-            onDocNumValueHelpCancelPress: function () {
-                this._oDocNumVHD.close();
-            },
-
-            /**
-             * Handles when user uses the search functionality 
-             * from the Value Help Dialog 
-             * @param {sap.ui.base.Event} oEvent from the ok button
-             * @public
-             */
-             onSearchforVH: function (oEvent) {
-                var sSearchQuery = this._oBasicSearchField.getValue(),
-                    aSelectionSet = oEvent.getParameter("selectionSet"),
-                    aFilters = aSelectionSet && aSelectionSet.reduce(function (aResult, oControl) {
-                        if (oControl.getValue()) {
-                            aResult.push(new Filter({
-                                path: oControl.getName(),
-                                operator: FilterOperator.Contains,
-                                value1: oControl.getValue()
-                            }));
-                        }
-
-                        return aResult;
-                    }, []);
-
-                aFilters.push(new Filter({
-                    filters: [
-                        new Filter({ path: this.sCurrMultiInput, operator: FilterOperator.Contains, value1: sSearchQuery })
-                    ],
-                    and: false
-                }));
-
-                this._filterTableVH(new Filter({
-                    filters: aFilters,
-                    and: true
-                }));
-            },
-
-            /**
-             * Sets the filters on the Value Help Dialog Table
-             * @private
-             */
-             _filterTableVH: function (oFilter) {
-                var oVHD = this._oVHD;
-                oVHD.getTableAsync().then(function (oTable) {
-                    if (oTable.bindRows) {
-                        oTable.getBinding("rows").filter(oFilter);
-                    }
-                    if (oTable.bindItems) {
-                        oTable.getBinding("items").filter(oFilter);
-                    }
-                    oVHD.update();
-                });
-            },
-
-            /**
-             * Update stored fields if it has been removed.
-             * @public
-             * @param {sap.ui.base.Event} oEvent from the multiinput
-             */
-            onUpdateTokens: function (oEvent) {
-                //Always selecting one
-                var oToken = oEvent.getParameter("removedTokens")[0];
-
-                var oMultiInput = oEvent.getSource();
-                var oProperties = {};
-                oProperties[this._oConstant["COMPANY_CODE_PROP"]] = this._oConstant["COMPANY_CODE_PROP"];
-
-                var sProperty = oProperties[oMultiInput.getName()];
-                if (oEvent.getParameter("type") === "removed") {
-                    var iIndex;
-                    var aKeys = this._oFormMdl.getProperty("/" + sProperty);
-                    if (oToken.data("range") === null) {
-                        iIndex = aKeys.indexOf(oToken.getKey());
-                    }
-                    else {
-                        iIndex = aKeys.findIndex(object => { return object.key === oToken.getKey()});
-                        if (this._oVHD &&
-                            this._oVHD._oFilterPanel &&
-                            this._oVHD._oFilterPanel._oConditionPanel) this._oVHD._oFilterPanel._oConditionPanel.removeCondition(oToken.getKey().replace("range", "condition"));
-                    }
-                    
-                    if (iIndex >= 0) aKeys.splice(iIndex, 1);
-                }
-            },
-
-            /**
-             * Update stored fields if it has been removed.
-             * @public
-             * @param {sap.ui.base.Event} oEvent from the multiinput
-             */
-            onUpdateDocNumTokens: function (oEvent) {
-                //Always selecting one
-                var oToken = oEvent.getParameter("removedTokens")[0];
-
-                var oMultiInput = oEvent.getSource();
-                var oProperties = {};
-                oProperties[this._oConstant["DOCUMENT_NO_PROP"]] = this._oConstant["DOCUMENT_NO_PROP"];
-
-                var sProperty = oProperties[oMultiInput.getName()];
-                if (oEvent.getParameter("type") === "removed") {
-                    var iIndex;
-                    var aKeys = this._oFormMdl.getProperty("/" + sProperty);
-                    if (oToken.data("range") === null) {
-                        iIndex = aKeys.indexOf(oToken.getKey());
-                    }
-                    else {
-                        iIndex = aKeys.findIndex(object => { return object.key === oToken.getKey()});
-                        if (this._oDocNumVHD &&
-                            this._oDocNumVHD._oFilterPanel &&
-                            this._oDocNumVHD._oFilterPanel._oConditionPanel) this._oDocNumVHD._oFilterPanel._oConditionPanel.removeCondition(oToken.getKey().replace("range", "condition"));
-                    }
-                    
-                    if (iIndex >= 0) aKeys.splice(iIndex, 1);
-                }
-            },
-
-            /**
-             * Add selected item from suggestions as a token
-             * @public
-             * @param {sap.ui.base.Event} oEvent
-             */
-             onSuggestedItemSelected: function (oEvent) {
-                var oMultiInput = oEvent.getSource();
-                var sInputName = oMultiInput.getName();
-                var oItem = oEvent.getParameter("selectedRow");
-                var aTokens = oMultiInput.getTokens();
-                var oKeysAndTexts = this._oConstant["FIELDS"];
-
-                if (oItem) {
-                    var oContext = oItem.getBindingContext();
-                    var sKey = oContext.getProperty(oKeysAndTexts[sInputName].key);
-                    var aKeys = this._oFormMdl.getProperty("/" + sInputName);
-
-                    if (aKeys.includes(sKey) === false) {
-                        aTokens.push(new Token({
-                            key: sKey,
-                            text: oContext.getProperty(oKeysAndTexts[sInputName].text) + " (" + sKey + ")"
-                        }));
-    
-                        oMultiInput.setTokens(aTokens);
-                        aKeys.push(sKey);
+                    if (!oFilters.Period && !oFilters.FiscalYear) {
+                        this._setDefaultPstDate();
                     }
                 }
             },
 
-            
             /**
-             * Generates the Test Run of Report.
+             * Handle select of Report Checkbox.
              * @public
              */
-             onSimulateForm: function () {
-                if (!this._getValidator().validate(this.byId("idMainForm"))) {
-                    MessageToast.show(this._getResourceText("validationMessage"), {
-                        closeOnBrowserNavigation: false
-                    });
-                    return;
-                }
+            onSelectCheckBox: function () {
+                if (this._oSmartFilterBar) this._oSmartFilterBar.fireFilterChange();
+            },
 
+            /**
+             * Handle search event of SmartFilterbar.
+             * Set Simulate property as true
+             * @public
+             */
+            onActivateSimulate: function () {
                 this._oFormMdl.setProperty("/Simulate", true);
-                this._oSmartTable.rebindTable();
             },
 
             /**
-             * Clears inputs in the form.
+             * Binds the latest data to the Smart Table.
              * @public
-             */
-             onClearForm: function () {
-                this._clearControl("idMulInpCompCode", this._oConstant["COMPANY_CODE_PROP"]);
-                this._clearControl("idComboBxFisYr", this._oConstant["FISCAL_YEAR_PROP"]);
-                this._clearControl("idComboBxFisYrPrd", this._oConstant["FISCAL_PERIOD_PROP"]);
-                this._clearControl("idCBRprtOnly", this._oConstant["REPORT_PROP"]);
-                this._clearControl("idMulInpDocNum", this._oConstant["DOCUMENT_NO_PROP"]);
-                this._setDefaultPstDate();
-
-                if (this._oVHD &&
-                    this._oVHD._oFilterPanel &&
-                    this._oVHD._oFilterPanel._oConditionPanel) this._oVHD._oFilterPanel._oConditionPanel.setConditions([]);
-            },
-
-            /**
-             * Removes data from a field
-             * @private
-             */
-             _clearControl: function (sId, sProperty) {
-                var oControl = this.byId(sId);
-
-                switch (oControl.getMetadata().getName()) {
-                    case "sap.m.ComboBox":
-                        oControl.setSelectedKey("");
-                        this._oFormMdl.setProperty("/" + sProperty, "");
-                        break;
-                    case "sap.m.MultiComboBox":
-                        oControl.setSelectedKeys([]);
-                        this._oFormMdl.setProperty("/" + sProperty, []);
-                        break;
-                    case "sap.m.MultiInput":
-                        oControl.removeAllTokens();
-                        this._oFormMdl.setProperty("/" + sProperty, []);
-                        break;
-                    case "sap.m.CheckBox":
-                        this._oFormMdl.setProperty("/" + sProperty, false);
-                        break;
-                }
-            },
-
-            /**
-             * Binds the latest data to the Smart Filter Table.
-             * @public
-             * @param {sap.ui.base.Event} oEvent from the smart filter table
+             * @param {sap.ui.base.Event} oEvent from the smart table
              */
              onBeforeRebindTable: function(oEvent) {
                 var oBindingParams = oEvent.getParameter("bindingParams");
-                oBindingParams.filters = this._getFilters();
+                var bSimulate = this._oFormMdl.getProperty("/Simulate");
+                var bReport = this._oFormMdl.getProperty("/Report");
 
-                this._oFormMdl.setProperty("/Busy", true);
-                this._oFormMdl.setProperty("/ShowFooter", false);
-                this._oFormMdl.setProperty("/PrintOut", false);
+                oBindingParams.filters.push(new Filter("Report", FilterOperator.EQ, bReport));
+                oBindingParams.filters.push(new Filter("Test", FilterOperator.EQ, (bSimulate && !bReport)));
+                
+                if (!bReport) {
+                    //add posting dates
+                    var oPostingDate = this._oFormMdl.getProperty("/PostingDate");
+                    var oDocumentDate = this._oFormMdl.getProperty("/DocumentDate");
+
+                    oBindingParams.filters.push(new Filter("PostingDate", FilterOperator.EQ, oPostingDate));
+                    oBindingParams.filters.push(new Filter("DocumentDate", FilterOperator.EQ, oDocumentDate));
+                }
+
+                this._resetFooterStatus();
                 this._addBindingListener(oBindingParams, "dataReceived", this._onDataReceived.bind(this));
+            },
+
+            /**
+             * Hides the footer and removes messages from the message Indicator
+             * @private
+             */
+            _resetFooterStatus: function () {
+                this._oFormMdl.setProperty("/Posting", false);
+                this._oMessageMdl.setData([]);
+                if (this._oMessagePopover) this._oMessagePopover.close();
+                this._oFormMdl.setProperty("/ShowFooter", false);
+                this._oFormMdl.setProperty("/ExportEnabled", false);
+                this._oFormMdl.setProperty("/PrintOut", false);
             },
 
             /**
@@ -597,31 +352,141 @@ sap.ui.define([
              */
             _onDataReceived: function (oEvent) {
                 var arrData = oEvent.getParameter("data")["results"];
-                var iDataLength = arrData.length;
                 var arrDocNum = [];
-                this._oFormMdl.setProperty("/Busy", false);
-                
-                if(this._oFormMdl.getProperty("/Simulate") && !this._oFormMdl.getProperty("/Report") && iDataLength > 0) {
-                    this._oFormMdl.setProperty("/ShowFooter", true);
-                } else if (iDataLength > 0) {
-                    var arrUniqueEntries = [];
-                    arrData.forEach((oResult) => {
-                        if(arrUniqueEntries.indexOf(oResult.PostedDocumentNumberSCC) < 0) {
-                            arrUniqueEntries.push(oResult.PostedDocumentNumberSCC);
-                            arrDocNum.push({DocumentNumber:oResult.PostedDocumentNumberSCC});
-                        }
-                    });
-                    this._oFormMdl.setProperty("/PrintOut", true);
-                }
+                var bReport = this._oFormMdl.getProperty("/Report");
+                var bSimulate = this._oFormMdl.getProperty("/Simulate");
 
+                if (arrData.length > 0) {
+                    this._oFormMdl.setProperty("/Rows", arrData);
+                    this._oFormMdl.setProperty("/ExportEnabled", true);
+
+                    if (bReport || !bSimulate) { //either report or posting
+                        var arrUniqueEntries = [];
+                        var sAfterPostMsg = this._getResourceText("afterPostMessage");
+                        var arrMessages = [{
+                            message: this._getResourceText("afterPostTitle"),
+                            additionalText: sAfterPostMsg,
+                            description: sAfterPostMsg,
+                            type: MessageType.Information
+                        }];
+
+                        arrData.forEach((oResult) => {
+                            if(oResult.PostedDocumentNumberSCC
+                                && arrUniqueEntries.indexOf(oResult.PostedDocumentNumberSCC) < 0) {
+                                arrUniqueEntries.push(oResult.PostedDocumentNumberSCC);
+                                arrDocNum.push({DocumentNumber:oResult.PostedDocumentNumberSCC});
+                            }
+
+                            if (!bReport && !bSimulate) { //posting only
+                                var arrKey = [
+                                    oResult.SenderCountry,
+                                    oResult.CompanyCode,
+                                    oResult.FIDocumentNumber,
+                                    oResult.FiscalYear,
+                                    oResult.Period
+                                ];
+
+                                if (oResult.PostedDocumentNumberSCC || oResult.PostedDocumentNumberRCC) {
+                                    var sDocNum = oResult.PostedDocumentNumberSCC;
+                                    if (sDocNum && oResult.PostedDocumentNumberRCC) {
+                                        sDocNum = sDocNum + " " + oResult.PostedDocumentNumberRCC;
+                                    } else {
+                                        sDocNum = oResult.PostedDocumentNumberRCC;
+                                    }
+
+                                    arrMessages.push({
+                                        message: arrKey,
+                                        additionalText: sDocNum,
+                                        description: this._getResourceText("docCreated", [sDocNum]),
+                                        type: MessageType.Success
+                                    });
+                                } else if (oResult.Message) {
+                                    arrMessages.push({
+                                        message: arrKey,
+                                        additionalText: oResult.Message,
+                                        description: oResult.Message,
+                                        type: MessageType.Error
+                                    });
+                                }
+                            }
+                        });
+
+                        this._oFormMdl.setProperty("/PrintOut", arrDocNum.length > 0);
+
+                        if (!bReport && !bSimulate) { //posting only
+                            if (arrMessages && arrMessages.length) this._oMessageMdl.setData(arrMessages);
+                            this._oFormMdl.setProperty("/Posting", true);
+                            this._oFormMdl.setProperty("/ShowFooter", true);
+                        }
+                    } else {
+                        this._oFormMdl.setProperty("/Posting", false);
+                        this._oFormMdl.setProperty("/ShowFooter", true);
+                    }
+                }
+                
                 this._oFormMdl.setProperty("/PostedDocumentNumberSCC", arrDocNum);
+            },
+
+            /**
+             * Handles custom export functionality. Export client data instead of server data.
+             * @public
+             */
+            onExportToExcel: function () {
+                var arrRows = this._oFormMdl.getObject("/Rows");
+
+                var oSheet = new Spreadsheet({
+                    workbook: {
+                        columns: this._arrExportColumns
+                    },
+                    dataSource: arrRows,
+                    fileName: this._oConstant.EXPORT_FILE_NAME,
+                    showProgress: true
+                });
+
+                oSheet.build().finally(function() {
+                    oSheet.destroy();
+                });
+            },
+
+            /**
+             * Handles button press of Message Indicator button
+             * @private
+             * @param {sap.ui.base.Event} oEvent
+             */
+            onOpenMessages: function (oEvent) {
+                var oButton = oEvent.getSource();
+                if (this._oMessagePopover) this._oMessagePopover.toggle(oButton);
+            },
+
+            /**
+             * Handles button press of Message details button
+             * @private
+             * @param {sap.ui.base.Event} oEvent
+             */
+            onShowMessage: function (oEvent) {
+                var oContext = oEvent.getSource().getBindingContext();
+                var sMessage = oContext.getProperty("Message");
+
+                this._oFormMdl.setProperty("/Message", sMessage.replaceAll(";", "\r\n"));
+
+                if (this._oMessageDialog) this._oMessageDialog.open();
+            },
+
+            /**
+             * Close the message dialog
+             * @private
+             * @param {sap.ui.base.Event} oEvent
+             */
+            onCloseMessage: function () {
+                if (this._oMessageDialog) this._oMessageDialog.close();
+                this._oFormMdl.setProperty("/Message", "");
             },
 
             /**
              * Posts the records that are selected.
              * @public
              */
-             onConfirmPost: function() {
+            onConfirmPost: function() {
                 MessageBox.confirm(this._getResourceText("confirmPosting"), {
                     onClose: (oAction) => {
                         if (oAction === MessageBox.Action.YES) {
@@ -668,51 +533,46 @@ sap.ui.define([
              * * @param {boolean} bDetailed Identifies if Detailed
              */
             _getPDF: function (bSummary, bDetailed) {
-                var aFilters = [];
+                if (this._oSmartFilterBar) {
+                    var aFilters = this._oSmartFilterBar.getFilters(["CompanyCode", "FiscalYear", "Period"]);
 
-                this._getFilters().forEach((oFilter) => {
-                    var sPath = oFilter.getPath();
-
-                    if (oFilter && !sPath) { //means it is possibly a range
-                        var aInFilters = oFilter.getFilters();
-                        if (aInFilters && aInFilters.length > 0) {
-                            sPath = aInFilters[0].getPath();
-                        }
-                    }
-
-                    switch (sPath) {
-                        case "CompanyCode":
-                        case "FiscalYear":
-                        case "Period":
-                            aFilters.push(oFilter);
-                            break;
-                    }
-                });
-
-                var aDocNumFilter = this._getFilter(this._oConstant["DOCUMENT_NO_PROP"]);
-                if (aDocNumFilter) aFilters.push(aDocNumFilter); 
-
-                aFilters.push(new Filter("Summary", FilterOperator.EQ, bSummary));
-                aFilters.push(new Filter("Detailed", FilterOperator.EQ, bDetailed));
-
-                if (aFilters && aFilters.length > 0) {
-                    this._oFormMdl.setProperty("/Busy", true);
-
-                    this._oModel.read("/PrintOut", {
-                        filters: aFilters,
-                        success: (oData) => {
-                            if (oData && oData.results && oData.results.length > 0) {
-                                this._displayPDF(oData.results[0]); //expecting only a single response
-                                this._oFormMdl.setProperty("/Busy", false);
-                            }
-                        },
-                        error: (oError) => {
-                            this._oFormMdl.setProperty("/Busy", false);
-                            MessageBox.error(this._getResourceText("pdfErrMessage"), {
-                                details: oError
-                            });
-                        }
+                    var arrDocNums = this._oFormMdl.getProperty("/FIDocumentNumber");
+                    var arrDocNumFilter = [];
+                    arrDocNums.forEach((sDocNum) => {
+                        arrDocNumFilter.push(new Filter("FIDocumentNumber", FilterOperator.EQ, sDocNum));
                     });
+                    if (arrDocNumFilter.length > 0) aFilters.push(new Filter({ filters: arrDocNumFilter, and: false }));
+
+                    aFilters.push(new Filter("Summary", FilterOperator.EQ, bSummary));
+                    aFilters.push(new Filter("Detailed", FilterOperator.EQ, bDetailed));
+
+                    if (aFilters && aFilters.length > 0) {
+                        this._oFormMdl.setProperty("/Busy", true);
+    
+                        this._oModel.read("/PrintOut", {
+                            filters: aFilters,
+                            success: (oData) => {
+                                if (oData && oData.results && oData.results.length > 0) {
+                                    this._displayPDF(oData.results[0]); //expecting only a single response
+                                    this._oFormMdl.setProperty("/Busy", false);
+                                }
+                            },
+                            error: (oError) => {
+                                this._oFormMdl.setProperty("/Busy", false);
+                                this._oFormMdl.setProperty("/Posting", true); //just to hide the posting button
+
+                                this._oMessageMdl.setData([
+                                    {
+                                        message: this._getResourceText("pdfErrMessage"),
+                                        description: oError,
+                                        type: MessageType.Error
+                                    }
+                                ]);
+
+                                this._oFormMdl.setProperty("/ShowFooter", true);
+                            }
+                        });
+                    }
                 }
             },
 
@@ -753,7 +613,17 @@ sap.ui.define([
 
                     this._oPDFViewer.open();
                 } else {
-                    MessageBox.warning(oData.Message);
+                    this._oFormMdl.setProperty("/Posting", true); //just to hide the posting button
+
+                    this._oMessageMdl.setData([
+                        {
+                            message: oData.Message,
+                            description: oData.Message,
+                            type: MessageType.Warning
+                        }
+                    ]);
+
+                    this._oFormMdl.setProperty("/ShowFooter", true);
                 }
             },
 
@@ -786,19 +656,260 @@ sap.ui.define([
             },
 
             /**
-             * Formatter function for removing leading zeroes
-             * @public
-             * @param sNum String input to remove leading zeroes
-             * @returns Number without leading zeroes
+             * Initialize export columns if metadata is loaded, show error if failed
+             * @private
              */
-            removeLeadingZeroes: function (sNum) {
-                var iNum = parseInt(sNum);
+            _handleMetadataLoading: function () {
 
-                if (iNum && !isNaN(iNum)) {
-                    return iNum + "";
+                if (this._oModel.isMetadataLoadingFailed()) {
+                    this._oMessageMdl.setData([
+                        {
+                            message: this._getResourceText("metadataErrMessage"),
+                            type: MessageType.Error
+                        }
+                    ]);
+                    this._oFormMdl.setProperty("/ShowFooter", true);
+                } else {
+                    this._oModel.metadataLoaded(true).then(() => {
+                        var oMetadata = this._oModel.getServiceMetadata();
+
+                        if (oMetadata && oMetadata.dataServices
+                            && oMetadata.dataServices.schema
+                            && oMetadata.dataServices.schema[0]
+                            && oMetadata.dataServices.schema[0].entityType
+                            && oMetadata.dataServices.schema[0].entityType.length > 0) {
+                            var oEntityType = oMetadata.dataServices.schema[0].entityType.find((oEntityType) => oEntityType.name === this._oConstant.MAIN_ENTITY_TYPE);
+
+                            if (oEntityType) {
+                                var oProps = this._getEntityTypePropertyValues(oEntityType);
+
+                                if (oProps) {
+                                    this._arrExportColumns = [
+                                        {
+                                            label: oProps.SenderCountry.label,
+                                            property: oProps.SenderCountry.property
+                                        },
+                                        {
+                                            label: oProps.CompanyCode.label,
+                                            property: oProps.CompanyCode.property
+                                        },
+                                        {
+                                            label: oProps.FIDocumentNumber.label,
+                                            property: oProps.FIDocumentNumber.property,
+                                            type: EdmType.Number
+                                        },
+                                        {
+                                            label: oProps.FiscalYear.label,
+                                            property: oProps.FiscalYear.property,
+                                            type: EdmType.Number
+                                        },
+                                        {
+                                            label: oProps.Period.label,
+                                            property: oProps.Period.property,
+                                            type: EdmType.Number
+                                        },
+                                        {
+                                            label: oProps.SenderJV.label,
+                                            property: oProps.SenderJV.property
+                                        },
+                                        {
+                                            label: oProps.SenderEquityType.label,
+                                            property: oProps.SenderEquityType.property
+                                        },
+                                        {
+                                            label: oProps.SenderCostCenter.label,
+                                            property: oProps.SenderCostCenter.property
+                                        },
+                                        {
+                                            label: oProps.SenderWBSElement.label,
+                                            property: oProps.SenderWBSElement.property
+                                        },
+                                        {
+                                            label: oProps.SenderCostElement.label,
+                                            property: oProps.SenderCostElement.property
+                                        },
+                                        {
+                                            label: oProps.SenderActivity.label,
+                                            property: oProps.SenderActivity.property
+                                        },
+                                        {
+                                            label: oProps.ReceiverCountry.label,
+                                            property: oProps.ReceiverCountry.property
+                                        },
+                                        {
+                                            label: oProps.ReceiverCompanyCode.label,
+                                            property: oProps.ReceiverCompanyCode.property
+                                        },
+                                        {
+                                            label: oProps.ReceiverCCFIDocumentNumber.label,
+                                            property: oProps.ReceiverCCFIDocumentNumber.property,
+                                            type: EdmType.Number
+                                        },
+                                        {
+                                            label: oProps.ReceiverCCFiscalYear.label,
+                                            property: oProps.ReceiverCCFiscalYear.property,
+                                            type: EdmType.Number
+                                        },
+                                        {
+                                            label: oProps.ReceiverJV.label,
+                                            property: oProps.ReceiverJV.property
+                                        },
+                                        {
+                                            label: oProps.ReceiverEquityType.label,
+                                            property: oProps.ReceiverEquityType.property
+                                        },
+                                        {
+                                            label: oProps.ReceiverCostCenter.label,
+                                            property: oProps.ReceiverCostCenter.property
+                                        },
+                                        {
+                                            label: oProps.ReceiverWBSElement.label,
+                                            property: oProps.ReceiverWBSElement.property
+                                        },
+                                        {
+                                            label: oProps.ReceiverCostElement.label,
+                                            property: oProps.ReceiverCostElement.property
+                                        },
+                                        {
+                                            label: oProps.ReceiverActivity.label,
+                                            property: oProps.ReceiverActivity.property
+                                        },
+                                        {
+                                            label: oProps.AgreementType.label,
+                                            property: oProps.AgreementType.property
+                                        },
+                                        {
+                                            label: oProps.Currency.label,
+                                            property: oProps.Currency.property
+                                        },
+                                        {
+                                            label: oProps.AmountInTransactionCurrency.label,
+                                            property: oProps.AmountInTransactionCurrency.property,
+                                            type: EdmType.Number,
+                                            scale: 2
+                                        },
+                                        {
+                                            label: oProps.TransactionCurrency.label,
+                                            property: oProps.TransactionCurrency.property
+                                        },
+                                        {
+                                            label: oProps.AmountInCompanyCodeCurrency.label,
+                                            property: oProps.AmountInCompanyCodeCurrency.property,
+                                            type: EdmType.Number,
+                                            scale: 2
+                                        },
+                                        {
+                                            label: oProps.CompanyCodeCurrency.label,
+                                            property: oProps.CompanyCodeCurrency.property
+                                        },
+                                        {
+                                            label: oProps.AmountInGlobalCurrency.label,
+                                            property: oProps.AmountInGlobalCurrency.property,
+                                            type: EdmType.Number,
+                                            scale: 2
+                                        },
+                                        {
+                                            label: oProps.GlobalCurrency.label,
+                                            property: oProps.GlobalCurrency.property
+                                        },
+                                        {
+                                            label: oProps.Customer.label,
+                                            property: oProps.Customer.property
+                                        },
+                                        {
+                                            label: oProps.OutputTaxCode.label,
+                                            property: oProps.OutputTaxCode.property
+                                        },
+                                        {
+                                            label: oProps.SenderICOAdjGL.label,
+                                            property: oProps.SenderICOAdjGL.property
+                                        },
+                                        {
+                                            label: oProps.Vendor.label,
+                                            property: oProps.Vendor.property
+                                        },
+                                        {
+                                            label: oProps.InputTaxCode.label,
+                                            property: oProps.InputTaxCode.property
+                                        },
+                                        {
+                                            label: oProps.WHT.label,
+                                            property: oProps.WHT.property
+                                        },
+                                        {
+                                            label: oProps.ReceiverICOAdjGL.label,
+                                            property: oProps.ReceiverICOAdjGL.property
+                                        },
+                                        {
+                                            label: oProps.SummaryInvoiceIndicator.label,
+                                            property: oProps.SummaryInvoiceIndicator.property
+                                        },
+                                        {
+                                            label: oProps.MarkupPercentage.label,
+                                            property: oProps.MarkupPercentage.property
+                                        },
+                                        {
+                                            label: oProps.MarkupGL.label,
+                                            property: oProps.MarkupGL.property
+                                        },
+                                        {
+                                            label: oProps.PostedDocumentNumberSCC.label,
+                                            property: oProps.PostedDocumentNumberSCC.property,
+                                            type: EdmType.Number
+                                        },
+                                        {
+                                            label: oProps.PostedDocumentFYSCC.label,
+                                            property: oProps.PostedDocumentFYSCC.property,
+                                            type: EdmType.Number
+                                        },
+                                        {
+                                            label: oProps.PostedDocumentNumberRCC.label,
+                                            property: oProps.PostedDocumentNumberRCC.property,
+                                            type: EdmType.Number
+                                        },
+                                        {
+                                            label: oProps.PostedDocumentFYRCC.label,
+                                            property: oProps.PostedDocumentFYRCC.property,
+                                            type: EdmType.Number
+                                        },
+                                        {
+                                            label: oProps.Message.label,
+                                            property: oProps.Message.property
+                                        }
+                                    ];
+                                }
+                            }
+                        }
+                    });
                 }
+            },
 
-                return sNum;
+            /**
+             * Capture Property Labels from Metadata
+             * @private
+             * @param {object} oEntityType Object containing properties of an Entity Type
+             * @returns {object} Key-value pair of properties and labels
+             */
+            _getEntityTypePropertyValues: function (oEntityType) {
+                var oProps = null;
+
+                if (oEntityType && oEntityType.property && oEntityType.property.length > 0) {
+                    oProps = {};
+
+                    oEntityType.property.forEach((oProperty) => {
+                        if (oProperty.extensions && oProperty.extensions.length > 0) {
+                            var oExtensionLabel = oProperty.extensions.find((oExtension) => oExtension.name === "label" );
+
+                            if (oExtensionLabel && oExtensionLabel.value) oProps[oProperty.name] = {
+                                property: oProperty.name,
+                                label: oExtensionLabel.value,
+                                scale: oProperty.scale
+                            }; 
+                        }
+                    });
+                }
+                
+                return oProps;
             },
 
             /**
@@ -822,6 +933,27 @@ sap.ui.define([
                         fOriginalHandler.apply(this, arguments);
                     };
                 }
+            },
+
+
+            /* =========================================================== */
+            /* Formatter Functions                                         */
+            /* =========================================================== */
+
+            /**
+             * Formatter function to remove leading zeroes
+             * @public
+             * @param sNum String containing digits with leading zeroes
+             * @returns String with no leading zeroes
+             */
+            removeLeadingZeroes: function (sNum) {
+                var iNum = parseInt(sNum);
+
+                if (iNum && !isNaN(iNum)) {
+                    return iNum + "";
+                }
+
+                return sNum;
             }
 
         });
