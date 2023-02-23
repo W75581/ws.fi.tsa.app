@@ -465,30 +465,6 @@ sap.ui.define([
             },
 
             /**
-             * Handles button press of Message details button
-             * @private
-             * @param {sap.ui.base.Event} oEvent
-             */
-            onShowMessage: function (oEvent) {
-                var oContext = oEvent.getSource().getBindingContext();
-                var sMessage = oContext.getProperty("Message");
-
-                this._oFormMdl.setProperty("/Message", sMessage.replaceAll(";", "\r\n"));
-
-                if (this._oMessageDialog) this._oMessageDialog.open();
-            },
-
-            /**
-             * Close the message dialog
-             * @private
-             * @param {sap.ui.base.Event} oEvent
-             */
-            onCloseMessage: function () {
-                if (this._oMessageDialog) this._oMessageDialog.close();
-                this._oFormMdl.setProperty("/Message", "");
-            },
-
-            /**
              * Posts the records that are selected.
              * @public
              */

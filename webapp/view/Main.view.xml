@@ -319,18 +319,6 @@
                 enabled="{mdlForm>/ShowFooter}" visible="{= !${mdlForm>/Posting} }" />
         </semantic:footerMainAction>
 
-        <semantic:dependents>
-            <Dialog id="idMessageDialog" type="Message" title="{/#TSAPostingType/Message/@sap:label}" state="Warning"
-                contentWidth="480px" resizable="true">
-                <content>
-                    <TextArea editable="false" value="{mdlForm>/Message}" width="100%" rows="10"  />
-                </content>
-                <beginButton>
-                    <Button type="Emphasized" text="{i18n>close}" press="onCloseMessage" />
-                </beginButton>
-            </Dialog>
-        </semantic:dependents>
-
     </semantic:SemanticPage>
 
 </mvc:View>
