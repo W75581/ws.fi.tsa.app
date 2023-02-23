@@ -164,6 +164,12 @@ sap.ui.define([
                 }
             },
 
+            /**
+             * Capture period end date based on Fiscal Year and Period
+             * @private
+             * @param {string} sFiscalYear Year to check
+             * @param {string} sPeriod Period to check
+             */
             _getPeriodEndDate: function (sFiscalYear, sPeriod) {
                 if (sFiscalYear && sPeriod) {
                     this._oFormMdl.setProperty("/SearchEnabled", false);

@@ -80,7 +80,7 @@
 
         <semantic:content>
 
-            <smartTable:SmartTable  class="sapUiResponsiveContentPadding" id="idMainTable" entitySet="TSAPosting"
+            <smartTable:SmartTable class="sapUiResponsiveContentPadding" id="idMainTable" entitySet="TSAPosting"
                 header="{i18n>items}" enableExport="false" useExportToExcel="false"
                 useTablePersonalisation="false" showRowCount="true" showVariantManagement="false"
                 persistencyKey="ws.fi.tsa.app.view.Main.SmartTable"
