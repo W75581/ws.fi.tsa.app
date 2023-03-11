@@ -1,7 +1,7 @@
 _schema-version: '3.2'
 ID: ws-fi-tsa-app
 description: TSA and Intercompany Invoicing
-version: 2.0.1
+version: 2.1.0
 modules:
   - name: ws-fi-tsa-app-destination-content
     type: com.sap.application.content
