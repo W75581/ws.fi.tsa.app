@@ -14,6 +14,7 @@ sap.ui.define([
         BASE_DATE_FORMAT: DateFormat.getDateInstance({pattern : sNoTimePattern, UTC: true }),
         NON_UTC_FORMAT: DateFormat.getDateInstance({pattern : sNoTimePattern }),
         FORM_OBJECT: {
+            SelectedIndices: [],
             FIDocumentNumber: [],
             PostedDocumentNumberSCC: [],
             Report: false,

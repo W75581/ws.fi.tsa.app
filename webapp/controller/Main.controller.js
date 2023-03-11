@@ -6,6 +6,7 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
+    "sap/m/MessageToast",
     "sap/m/MessageBox",
     "sap/m/PDFViewer",
     "sap/ui/export/Spreadsheet",
@@ -17,7 +18,7 @@ sap.ui.define([
      */
     function (Controller, FileUtil, coreLibrary, Core,
             JSONModel, Filter, FilterOperator,
-            MessageBox, PDFViewer,
+            MessageToast, MessageBox, PDFViewer,
             Spreadsheet, exportLibrary,
             URLListValidator) {
         "use strict";
@@ -79,10 +80,11 @@ sap.ui.define([
              * @private
              */
             _onTSAMatched: function () {
+                if (this._oSmartTable) this._oSmartTable.getTable().clearSelection();
                 if (this._oFormMdl) this._oFormMdl.setData(JSON.parse(JSON.stringify(this._oConstant.FORM_OBJECT)));
                 if (this._oPDFURI) URL.revokeObjectURL(this._oPDFURI);
                 if (this._oMessageManager && this._oMessageMdl) this._oMessageMdl.setData([]);
-
+                
                 this._setDefaultPstDate();
             },
 
@@ -317,6 +319,7 @@ sap.ui.define([
              * @param {sap.ui.base.Event} oEvent from the smart table
              */
              onBeforeRebindTable: function(oEvent) {
+                var oTable = oEvent.getSource().getTable();
                 var oBindingParams = oEvent.getParameter("bindingParams");
                 var bSimulate = this._oFormMdl.getProperty("/Simulate");
                 var bReport = this._oFormMdl.getProperty("/Report");
@@ -331,6 +334,29 @@ sap.ui.define([
 
                     oBindingParams.filters.push(new Filter("PostingDate", FilterOperator.EQ, oPostingDate));
                     oBindingParams.filters.push(new Filter("DocumentDate", FilterOperator.EQ, oDocumentDate));
+
+                    //add Document Number Filter
+                    if (!bSimulate) {
+                        var arrIndices = this._oFormMdl.getProperty("/SelectedIndices");
+                        var arrDocNumFilter = [];
+
+                        if (arrIndices && arrIndices.length > 0) {
+                            arrIndices.forEach((iIndex) => {
+                                var oRow = oTable.getContextByIndex(iIndex).getObject();
+            
+                                if (oRow) {
+                                    arrDocNumFilter.push(new Filter("FIDocumentNumber", FilterOperator.EQ, oRow.FIDocumentNumber));
+                                }
+                            });
+                        }
+
+                        if (arrDocNumFilter.length > 0) {
+                            oBindingParams.filters.push(new Filter({
+                                filters: arrDocNumFilter,
+                                and: false
+                            }));
+                        }
+                    }
                 }
 
                 this._resetFooterStatus();
@@ -343,6 +369,7 @@ sap.ui.define([
              */
             _resetFooterStatus: function () {
                 this._oFormMdl.setProperty("/Posting", false);
+                this._oFormMdl.setProperty("/ItemsSelected", false);
                 this._oMessageMdl.setData([]);
                 if (this._oMessagePopover) this._oMessagePopover.close();
                 this._oFormMdl.setProperty("/ShowFooter", false);
@@ -364,6 +391,8 @@ sap.ui.define([
                 if (arrData.length > 0) {
                     this._oFormMdl.setProperty("/Rows", arrData);
                     this._oFormMdl.setProperty("/ExportEnabled", true);
+                    this._oFormMdl.setProperty("/SelectedIndices", []);
+                    if (this._oSmartTable) this._oSmartTable.getTable().clearSelection();
 
                     if (bReport || !bSimulate) { //either report or posting
                         var arrUniqueEntries = [];
@@ -464,14 +493,35 @@ sap.ui.define([
             },
 
             /**
+             * Handles event for when a row is selected/deselected
+             * @public
+             * @param {sap.ui.base.Event} oEvent
+             */
+            onRowSelected: function (oEvent) {
+                var oTable = oEvent.getSource();
+                var arrIndices = oTable.getSelectedIndices();
+
+                this._oFormMdl.setProperty("/ItemsSelected", arrIndices.length > 0);
+            },
+
+            /**
              * Posts the records that are selected.
              * @public
              */
             onConfirmPost: function() {
+                var oTable = this._oSmartTable.getTable();
+                var arrIndices = oTable.getSelectedIndices();
+
+                if (arrIndices.length < 1) {
+                    MessageToast.show(this._getResourceText("saveErrMessage"));
+                    return;
+                }
+
                 MessageBox.confirm(this._getResourceText("confirmPosting"), {
                     onClose: (oAction) => {
                         if (oAction === MessageBox.Action.YES) {
                             this._oFormMdl.setProperty("/Simulate", false);
+                            this._oFormMdl.setProperty("/SelectedIndices", arrIndices);
                             this._oSmartTable.rebindTable();
                         }
                     },
